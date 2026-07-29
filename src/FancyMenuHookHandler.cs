@@ -12,7 +12,6 @@ namespace DMSxMeadow
         private static Hook signalHook;
         private static Hook updateHook;
         private static Dictionary<DressMySlugcat.FancyMenu, MeadowProfileUI> _uiInstances = new Dictionary<DressMySlugcat.FancyMenu, MeadowProfileUI>();
-        private static bool _uiAdded = false;
         
         public static void Initialize()
         {
@@ -80,6 +79,12 @@ namespace DMSxMeadow
                         ui.Initialize();
                         _uiInstances[fancyMenu] = ui;
                     }
+                    
+                    // IMPORTANTE: Dar tick a los controles de UI para que funcionen
+                    if (_uiInstances.TryGetValue(fancyMenu, out var meadowUI))
+                    {
+                        meadowUI.TickControls();
+                    }
                 }
             }
             catch (Exception ex)
@@ -98,7 +103,7 @@ namespace DMSxMeadow
             string message)
         {
             // Manejar mensajes de Meadow
-            if (message == "MEADOW_TOGGLE" || message == "PROFILE_CHANGE")
+            if (message == "MEADOW_TOGGLE" || message == "PROFILE_SET")
             {
                 try
                 {

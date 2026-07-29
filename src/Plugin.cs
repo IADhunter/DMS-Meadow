@@ -17,7 +17,6 @@ namespace DMSxMeadow
         public static new ManualLogSource Logger;
         
         private Hook customizationHook;
-        private bool _initialized;
         
         public void Awake()
         {
@@ -80,7 +79,6 @@ namespace DMSxMeadow
             {
                 if (player?.abstractCreature != null)
                 {
-                    // Usar TryGetValue en lugar de GetValueOrDefault
                     if (RainMeadow.OnlinePhysicalObject.map.TryGetValue(
                         player.abstractCreature, out var onlineEntity))
                     {
