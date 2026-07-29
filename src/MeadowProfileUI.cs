@@ -9,7 +9,7 @@ namespace DMSxMeadow
     public class MeadowProfileUI
     {
         private DressMySlugcat.FancyMenu _fancyMenu;
-        private SelectOneButton _meadowModeButton;  // Cambiado de SimpleButton a SelectOneButton
+        private SelectOneButton _meadowModeButton;
         private OpTextBox _steamIdField;
         private OpTextBox _profileNumberField;
         private SimpleButton _profileSetButton;
@@ -19,6 +19,10 @@ namespace DMSxMeadow
         
         private MenuTabWrapper _tabWrapper;
         private bool _uiAdded = false;
+        
+        // Backup del perfil nativo para restaurar al salir de Meadow
+        private DressMySlugcat.Customization _nativeBackup;
+        private int _borrowedPlayerIndex = -1;
         
         public MeadowProfileUI(DressMySlugcat.FancyMenu fancyMenu)
         {
@@ -94,7 +98,7 @@ namespace DMSxMeadow
                 Plugin.Logger.LogInfo($"Button position: X={startX}, Y={yPos}");
                 
                 // ============================================================
-                // 4. Crear MenuTabWrapper - Necesario para OpTextBox
+                // 4. Crear MenuTabWrapper
                 // ============================================================
                 _tabWrapper = new MenuTabWrapper(_fancyMenu, _fancyMenu.pages[0]);
                 _fancyMenu.pages[0].subObjects.Add(_tabWrapper);
@@ -108,7 +112,7 @@ namespace DMSxMeadow
                     _fancyMenu,
                     _fancyMenu.pages[0],
                     "MEADOW",
-                    "MEADOW_SERIES",           // Serie propia, separada de PLAYER_
+                    "MEADOW_SERIES",
                     new Vector2(startX, yPos),
                     new Vector2(80f, 30f),
                     meadowArray,
@@ -162,7 +166,7 @@ namespace DMSxMeadow
                 _profileSetButton.inactive = true;
                 
                 // ============================================================
-                // 7. Steam ID (campo escribible)
+                // 7. Steam ID
                 // ============================================================
                 yOffset = 35f;
                 
@@ -362,25 +366,7 @@ namespace DMSxMeadow
                             });
                         }
                         
-                        var dummyField = _fancyMenu.GetType()
-                            .GetField("slugcatDummy", 
-                                System.Reflection.BindingFlags.Public | 
-                                System.Reflection.BindingFlags.Instance);
-                        
-                        var dummy = dummyField?.GetValue(_fancyMenu);
-                        if (dummy != null)
-                        {
-                            var updateMethod = dummy.GetType().GetMethod("UpdateSprites", 
-                                System.Reflection.BindingFlags.Public | 
-                                System.Reflection.BindingFlags.Instance);
-                            updateMethod?.Invoke(dummy, null);
-                        }
-                        
-                        var updateControlsMethod = _fancyMenu.GetType()
-                            .GetMethod("UpdateControls", 
-                                System.Reflection.BindingFlags.Public | 
-                                System.Reflection.BindingFlags.Instance);
-                        updateControlsMethod?.Invoke(_fancyMenu, null);
+                        RefreshDummyAndControls();
                     }
                 }
             }
@@ -391,42 +377,12 @@ namespace DMSxMeadow
         }
         
         // ============================================================
-        // Toggle Meadow Mode - Actualizado
+        // Refrescar dummy y controles
         // ============================================================
-        public void ToggleMeadowMode()
+        private void RefreshDummyAndControls()
         {
-            Plugin.Logger.LogInfo($"ToggleMeadowMode called - Current: {MeadowProfileManager.IsMeadowModeActive}");
-            
-            MeadowProfileManager.IsMeadowModeActive = !MeadowProfileManager.IsMeadowModeActive;
-            
-            bool active = MeadowProfileManager.IsMeadowModeActive;
-            
-            if (active)
+            try
             {
-                _profileSetButton.inactive = false;
-                _statusLabel.text = $"Meadow ON - Profile {MeadowProfileManager.CurrentProfileNumber}";
-                
-                int profileNumber = MeadowProfileManager.CurrentProfileNumber;
-                _profileNumberField.value = profileNumber.ToString();
-                
-                string steamId = MeadowProfileManager.GetSteamID(profileNumber);
-                _steamIdField.value = string.IsNullOrEmpty(steamId) ? "unassigned" : steamId;
-                
-                LoadProfile(profileNumber);
-                
-                // El marco de selección ahora lo maneja el hook de GetCurrentlySelectedOfSeries
-                // No tocamos selectedPlayerIndex directamente
-                
-                Plugin.Logger.LogInfo("Meadow mode activated");
-            }
-            else
-            {
-                _profileSetButton.inactive = true;
-                _statusLabel.text = "";
-                
-                SaveCurrentProfile();
-                
-                // Restaurar skin de DMS
                 var dummyField = _fancyMenu.GetType()
                     .GetField("slugcatDummy", 
                         System.Reflection.BindingFlags.Public | 
@@ -446,8 +402,99 @@ namespace DMSxMeadow
                         System.Reflection.BindingFlags.Public | 
                         System.Reflection.BindingFlags.Instance);
                 updateControlsMethod?.Invoke(_fancyMenu, null);
-                
-                Plugin.Logger.LogInfo("Meadow mode deactivated");
+            }
+            catch (Exception ex)
+            {
+                Plugin.Logger.LogError($"Error refreshing dummy: {ex.Message}");
+            }
+        }
+        
+        // ============================================================
+        // Activar/Desactivar Meadow Mode
+        // ============================================================
+        public void ActivateMeadowMode()
+        {
+            if (MeadowProfileManager.IsMeadowModeActive) return;
+            
+            Plugin.Logger.LogInfo("Activating Meadow mode");
+            
+            MeadowProfileManager.IsMeadowModeActive = true;
+            
+            // Backup del perfil nativo que estamos "pidiendo prestado"
+            _borrowedPlayerIndex = _fancyMenu.selectedPlayerIndex;
+            _nativeBackup = DressMySlugcat.Customization.For(_fancyMenu.selectedSlugcat, _borrowedPlayerIndex).Copy();
+            
+            _profileSetButton.inactive = false;
+            
+            int profileNumber = MeadowProfileManager.CurrentProfileNumber;
+            _profileNumberField.value = profileNumber.ToString();
+            
+            string steamId = MeadowProfileManager.GetSteamID(profileNumber);
+            _steamIdField.value = string.IsNullOrEmpty(steamId) ? "unassigned" : steamId;
+            
+            LoadProfile(profileNumber);
+            _statusLabel.text = $"Meadow ON - Profile {profileNumber}";
+            
+            RefreshDummyAndControls();
+            
+            Plugin.Logger.LogInfo($"Meadow mode activated, borrowed player {_borrowedPlayerIndex}");
+        }
+        
+        public void DeactivateMeadowMode()
+        {
+            if (!MeadowProfileManager.IsMeadowModeActive) return;
+            
+            Plugin.Logger.LogInfo("Deactivating Meadow mode");
+            
+            // Guardar los cambios en meadowcustom.dat
+            SaveCurrentProfile();
+            
+            // Restaurar el perfil nativo a como estaba antes de tocarlo
+            if (_nativeBackup != null && _borrowedPlayerIndex >= 0)
+            {
+                var native = DressMySlugcat.Customization.For(_fancyMenu.selectedSlugcat, _borrowedPlayerIndex);
+                native.CustomTail.Length = _nativeBackup.CustomTail.Length;
+                native.CustomTail.Wideness = _nativeBackup.CustomTail.Wideness;
+                native.CustomTail.Roundness = _nativeBackup.CustomTail.Roundness;
+                native.CustomTail.Lift = _nativeBackup.CustomTail.Lift;
+                native.CustomTail.Color = _nativeBackup.CustomTail.Color;
+                native.CustomTail.CustTailShape = _nativeBackup.CustomTail.CustTailShape;
+                native.CustomTail.AsymTail = _nativeBackup.CustomTail.AsymTail;
+                native.CustomSprites.Clear();
+                foreach (var s in _nativeBackup.CustomSprites)
+                {
+                    native.CustomSprites.Add(new DressMySlugcat.CustomSprite
+                    {
+                        Sprite = s.Sprite,
+                        SpriteSheetID = s.SpriteSheetID,
+                        ColorHex = s.ColorHex,
+                        Enforce = s.Enforce
+                    });
+                }
+                Plugin.Logger.LogInfo($"Restored native profile {_borrowedPlayerIndex} from backup");
+            }
+            
+            _nativeBackup = null;
+            _borrowedPlayerIndex = -1;
+            
+            MeadowProfileManager.IsMeadowModeActive = false;
+            _profileSetButton.inactive = true;
+            _statusLabel.text = "";
+            
+            RefreshDummyAndControls();
+            
+            Plugin.Logger.LogInfo("Meadow mode deactivated");
+        }
+        
+        public void ToggleMeadowMode()
+        {
+            if (MeadowProfileManager.IsMeadowModeActive)
+            {
+                DeactivateMeadowMode();
+            }
+            else
+            {
+                ActivateMeadowMode();
             }
             
             _fancyMenu.PlaySound(SoundID.MENU_Switch_Page_Out);

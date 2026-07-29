@@ -39,7 +39,7 @@ namespace DMSxMeadow
                 }
                 
                 // ============================================================
-                // HOOK 2: FancyMenu.Singal (para manejar eventos de la UI)
+                // HOOK 2: FancyMenu.Singal
                 // ============================================================
                 MethodInfo signalMethod = fancyMenuType.GetMethod("Singal");
                 if (signalMethod != null)
@@ -56,7 +56,7 @@ namespace DMSxMeadow
                 }
                 
                 // ============================================================
-                // HOOK 3: GetCurrentlySelectedOfSeries (para controlar el marco)
+                // HOOK 3: GetCurrentlySelectedOfSeries
                 // ============================================================
                 MethodInfo getSelMethod = fancyMenuType.GetMethod("GetCurrentlySelectedOfSeries");
                 if (getSelMethod != null)
@@ -73,7 +73,7 @@ namespace DMSxMeadow
                 }
                 
                 // ============================================================
-                // HOOK 4: SetCurrentlySelectedOfSeries (para manejar clicks en MEADOW)
+                // HOOK 4: SetCurrentlySelectedOfSeries
                 // ============================================================
                 MethodInfo setSelMethod = fancyMenuType.GetMethod("SetCurrentlySelectedOfSeries");
                 if (setSelMethod != null)
@@ -157,20 +157,27 @@ namespace DMSxMeadow
             string series,
             int to)
         {
-            // Si es la serie de MEADOW, manejar el toggle nosotros
+            // Si es la serie de MEADOW, toggle
             if (series == "MEADOW_SERIES")
             {
                 if (_uiInstances.TryGetValue(self, out var ui))
                 {
-                    // Solo toggle si no estábamos ya seleccionados
-                    // SelectOneButton.Clicked() llama a SetSelected incluso si ya está seleccionado
-                    // pero nosotros queremos toggle siempre
-                    ui.HandleSignal("MEADOW_TOGGLE");
+                    ui.ToggleMeadowMode();
                 }
                 return; // No llamar a orig, nosotros manejamos el toggle
             }
             
-            // Para todo lo demás (PLAYER_, SLUGCAT_, etc.), dejar que DMS maneje
+            // Si es un botón PLAYER_ y Meadow está activo, desactivar Meadow primero
+            if (series.StartsWith("PLAYER_") && MeadowProfileManager.IsMeadowModeActive)
+            {
+                Plugin.Logger.LogInfo($"Player button clicked while Meadow active - deactivating Meadow first");
+                if (_uiInstances.TryGetValue(self, out var ui))
+                {
+                    ui.DeactivateMeadowMode();
+                }
+            }
+            
+            // Dejar que DMS maneje la selección normal
             orig(self, series, to);
         }
         
