@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using Menu;
 using MonoMod.RuntimeDetour;
@@ -9,47 +10,35 @@ namespace DMSxMeadow
     public static class FancyMenuHookHandler
     {
         private static Hook signalHook;
-        private static bool buttonAdded = false;
-        private static MeadowProfileUI _meadowUI;
+        private static Hook updateHook;
+        private static Dictionary<DressMySlugcat.FancyMenu, MeadowProfileUI> _uiInstances = new Dictionary<DressMySlugcat.FancyMenu, MeadowProfileUI>();
+        private static bool _uiAdded = false;
         
         public static void Initialize()
         {
             try
             {
-                Type fancyMenuType = typeof(DressMySlugcat.FancyMenu);
-                
                 // ============================================================
-                // HOOK DEL CONSTRUCTOR - CORREGIDO
+                // HOOK 1: ProcessManager.Update (para detectar FancyMenu)
                 // ============================================================
-                // El constructor de FancyMenu es: FancyMenu(ProcessManager, PauseMenu)
-                // El hook DEBE tener los mismos parámetros
-                
-                ConstructorInfo ctor = fancyMenuType.GetConstructor(
-                    new Type[] { typeof(ProcessManager), typeof(PauseMenu) });
-                
-                if (ctor != null)
+                MethodInfo updateMethod = typeof(ProcessManager).GetMethod("Update");
+                if (updateMethod != null)
                 {
-                    // En lugar de hookear el constructor, hookeamos el método Update de FancyMenu
-                    // que se llama constantemente y ahí agregamos el UI
-                    MethodInfo updateMethod = fancyMenuType.GetMethod("Update");
-                    if (updateMethod != null)
+                    MethodInfo hookMethod = typeof(FancyMenuHookHandler)
+                        .GetMethod("Update_Hook", 
+                            BindingFlags.NonPublic | BindingFlags.Static);
+                    
+                    if (hookMethod != null)
                     {
-                        MethodInfo hookUpdate = typeof(FancyMenuHookHandler)
-                            .GetMethod("FancyMenu_Update_Hook", 
-                                BindingFlags.NonPublic | BindingFlags.Static);
-                        
-                        if (hookUpdate != null)
-                        {
-                            var updateHook = new Hook(updateMethod, hookUpdate);
-                            Plugin.Logger.LogInfo("FancyMenu.Update hooked");
-                        }
+                        updateHook = new Hook(updateMethod, hookMethod);
+                        Plugin.Logger.LogInfo("ProcessManager.Update hooked");
                     }
                 }
                 
                 // ============================================================
-                // HOOK DEL MÉTODO Singal - ESTE SI FUNCIONA
+                // HOOK 2: FancyMenu.Singal (para manejar eventos de la UI)
                 // ============================================================
-                MethodInfo signalMethod = fancyMenuType.GetMethod("Singal");
+                MethodInfo signalMethod = typeof(DressMySlugcat.FancyMenu).GetMethod("Singal");
                 if (signalMethod != null)
                 {
                     MethodInfo hookSignal = typeof(FancyMenuHookHandler)
@@ -70,34 +59,37 @@ namespace DMSxMeadow
         }
         
         // ============================================================
-        // HOOK DE UPDATE - Para agregar UI cuando se abre FancyMenu
+        // HOOK DE Update - Se ejecuta cada frame
         // ============================================================
-        private static void FancyMenu_Update_Hook(
-            Action<DressMySlugcat.FancyMenu> orig,
-            DressMySlugcat.FancyMenu fancyMenu)
+        private static void Update_Hook(
+            Action<ProcessManager, float> orig,
+            ProcessManager self,
+            float deltaTime)
         {
-            // Llamar al Update original primero
-            orig(fancyMenu);
+            orig(self, deltaTime);
             
             try
             {
-                // Agregar UI solo una vez
-                if (!buttonAdded && fancyMenu != null)
+                // Verificar si currentMainLoop es FancyMenu
+                if (self.currentMainLoop is DressMySlugcat.FancyMenu fancyMenu)
                 {
-                    _meadowUI = new MeadowProfileUI(fancyMenu);
-                    _meadowUI.Initialize();
-                    buttonAdded = true;
-                    Plugin.Logger.LogInfo("Meadow UI initialized from Update hook");
+                    if (!_uiInstances.ContainsKey(fancyMenu))
+                    {
+                        Plugin.Logger.LogInfo("FancyMenu detected in Update hook - creating UI");
+                        var ui = new MeadowProfileUI(fancyMenu);
+                        ui.Initialize();
+                        _uiInstances[fancyMenu] = ui;
+                    }
                 }
             }
             catch (Exception ex)
             {
-                Plugin.Logger.LogError($"Error adding UI in Update hook: {ex.Message}");
+                Plugin.Logger.LogError($"Error in Update hook: {ex.Message}");
             }
         }
         
         // ============================================================
-        // HOOK DE Singal - Para manejar los clicks en los botones
+        // HOOK DE Singal
         // ============================================================
         private static void Singal_Hook(
             Action<DressMySlugcat.FancyMenu, MenuObject, string> orig,
@@ -105,15 +97,15 @@ namespace DMSxMeadow
             MenuObject sender,
             string message)
         {
+            // Manejar mensajes de Meadow
             if (message == "MEADOW_TOGGLE" || message == "PROFILE_CHANGE")
             {
                 try
                 {
-                    if (_meadowUI != null)
+                    if (_uiInstances.TryGetValue(fancyMenu, out var ui))
                     {
-                        _meadowUI.HandleSignal(message);
+                        ui.HandleSignal(message);
                     }
-                    // No llamamos a orig porque ya manejamos el mensaje
                     return;
                 }
                 catch (Exception ex)
@@ -122,7 +114,7 @@ namespace DMSxMeadow
                 }
             }
             
-            // Auto-guardar en cambios de skin
+            // Auto-guardar cuando se cambian sprites en modo Meadow
             if (MeadowProfileManager.IsMeadowModeActive && 
                 (message.StartsWith("SPRITE_SELECTOR_") || 
                  message.StartsWith("SPRITE_CUSTOMIZER_") || 
@@ -132,9 +124,9 @@ namespace DMSxMeadow
             {
                 try
                 {
-                    if (_meadowUI != null)
+                    if (_uiInstances.TryGetValue(fancyMenu, out var ui))
                     {
-                        _meadowUI.AutoSave();
+                        ui.AutoSave();
                     }
                 }
                 catch (Exception ex)
@@ -144,6 +136,17 @@ namespace DMSxMeadow
             }
             
             orig(fancyMenu, sender, message);
+        }
+        
+        // ============================================================
+        // Limpieza
+        // ============================================================
+        public static void Dispose()
+        {
+            updateHook?.Dispose();
+            signalHook?.Dispose();
+            _uiInstances.Clear();
+            Plugin.Logger.LogInfo("FancyMenu hooks disposed");
         }
     }
 }

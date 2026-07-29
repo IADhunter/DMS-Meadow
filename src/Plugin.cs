@@ -17,6 +17,7 @@ namespace DMSxMeadow
         public static new ManualLogSource Logger;
         
         private Hook customizationHook;
+        private bool _initialized;
         
         public void Awake()
         {
@@ -45,6 +46,7 @@ namespace DMSxMeadow
         {
             try
             {
+                // Hookear Customization.For(Player, bool)
                 MethodInfo originalFor = typeof(DressMySlugcat.Customization)
                     .GetMethod("For", new Type[] { typeof(Player), typeof(bool) });
                 
@@ -66,6 +68,9 @@ namespace DMSxMeadow
             }
         }
         
+        // ============================================================
+        // HOOK PARA APLICAR SKINS DE MEADOW POR STEAMID
+        // ============================================================
         private static DressMySlugcat.Customization Customization_For_Hook(
             Func<Player, bool, DressMySlugcat.Customization> orig,
             Player player,
@@ -75,6 +80,7 @@ namespace DMSxMeadow
             {
                 if (player?.abstractCreature != null)
                 {
+                    // Usar TryGetValue en lugar de GetValueOrDefault
                     if (RainMeadow.OnlinePhysicalObject.map.TryGetValue(
                         player.abstractCreature, out var onlineEntity))
                     {
@@ -106,6 +112,7 @@ namespace DMSxMeadow
         public void OnDestroy()
         {
             customizationHook?.Dispose();
+            FancyMenuHookHandler.Dispose();
             Logger.LogInfo("DMS x Meadow unloaded");
         }
     }

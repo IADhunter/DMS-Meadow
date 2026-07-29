@@ -28,87 +28,119 @@ namespace DMSxMeadow
             
             try
             {
+                Plugin.Logger.LogInfo("MeadowProfileUI.Initialize() started");
+                
+                // ============================================================
+                // 1. Buscar textBoxBorder (es PUBLIC en DMS)
+                // ============================================================
                 var textBoxBorderField = _fancyMenu.GetType()
                     .GetField("textBoxBorder", 
-                        System.Reflection.BindingFlags.NonPublic | 
+                        System.Reflection.BindingFlags.Public | 
                         System.Reflection.BindingFlags.Instance);
+                
+                if (textBoxBorderField == null)
+                {
+                    Plugin.Logger.LogError("textBoxBorderField is NULL!");
+                    return;
+                }
                 
                 var textBoxBorder = textBoxBorderField?.GetValue(_fancyMenu) as RoundedRect;
-                if (textBoxBorder == null) return;
+                if (textBoxBorder == null)
+                {
+                    Plugin.Logger.LogError("textBoxBorder is NULL!");
+                    return;
+                }
                 
-                float leftAnchor = (1366f - _fancyMenu.manager.rainWorld.options.ScreenSize.x) / 2f;
+                Plugin.Logger.LogInfo($"textBoxBorder found: pos=({textBoxBorder.pos.x}, {textBoxBorder.pos.y}), size=({textBoxBorder.size.x}, {textBoxBorder.size.y})");
                 
-                // Obtener la cantidad de jugadores que tiene DMS
+                // ============================================================
+                // 2. Obtener cantidad de jugadores (es PUBLIC en DMS)
+                // ============================================================
                 var playerButtonsField = _fancyMenu.GetType()
                     .GetField("playerButtons", 
-                        System.Reflection.BindingFlags.NonPublic | 
+                        System.Reflection.BindingFlags.Public | 
                         System.Reflection.BindingFlags.Instance);
                 
-                var playerButtons = playerButtonsField?.GetValue(_fancyMenu) as SelectOneButton[];
-                int playerCount = playerButtons?.Length ?? 4;
+                int playerCount = 4; // Default
+                if (playerButtonsField != null)
+                {
+                    var playerButtons = playerButtonsField.GetValue(_fancyMenu) as Array;
+                    if (playerButtons != null)
+                    {
+                        playerCount = playerButtons.Length;
+                    }
+                }
                 
-                // Calcular posición: al lado derecho de los botones de perfil
-                // Los botones están en: textBoxBorder.pos + new Vector2(startPos + (65 * i), -40)
-                // El último botón está en: textBoxBorder.pos.x + (65 * (playerCount - 1))
-                float startX = textBoxBorder.pos.x + (65 * playerCount) + 10f;
+                Plugin.Logger.LogInfo($"playerCount: {playerCount}");
+                
+                // ============================================================
+                // 3. Calcular posición visible
+                // ============================================================
+                float leftAnchor = (1366f - _fancyMenu.manager.rainWorld.options.ScreenSize.x) / 2f;
+                
+                // Posición: al lado del último botón de perfil
+                float startX = textBoxBorder.pos.x + (65f * playerCount) + 10f - leftAnchor;
                 float yPos = textBoxBorder.pos.y - 40f;
                 
-                // ========================================================
-                // Botón MEADOW MODE - al lado de los botones de perfil
-                // ========================================================
+                // CORRECCIÓN: Si la posición calculada es negativa o fuera de rango, usar posición fija
+                if (startX < 0 || startX > 1366f)
+                {
+                    Plugin.Logger.LogWarning($"startX={startX} fuera de rango, usando posición fija");
+                    startX = 100f;
+                    yPos = 100f;
+                }
+                
+                Plugin.Logger.LogInfo($"Button position: X={startX}, Y={yPos}");
+                Plugin.Logger.LogInfo($"leftAnchor: {leftAnchor}");
+                
+                // ============================================================
+                // 4. Crear botón MEADOW
+                // ============================================================
                 _meadowModeButton = new SimpleButton(
                     _fancyMenu,
                     _fancyMenu.pages[0],
                     "MEADOW",
                     "MEADOW_TOGGLE",
                     new Vector2(startX, yPos),
-                    new Vector2(80f, 30f)  // Más pequeño para que quepa
+                    new Vector2(80f, 30f)
                 );
                 _fancyMenu.pages[0].subObjects.Add(_meadowModeButton);
+                Plugin.Logger.LogInfo($"MEADOW button added at ({startX}, {yPos})");
                 
-                // ========================================================
-                // Etiqueta "Profile:" - debajo del botón MEADOW
-                // ========================================================
+                // ============================================================
+                // 5. Crear controles adicionales
+                // ============================================================
                 _profileLabel = new MenuLabel(
                     _fancyMenu,
                     _fancyMenu.pages[0],
                     "Profile:",
-                    new Vector2(startX, yPos - 30f),
+                    new Vector2(startX, yPos + 35f),
                     new Vector2(60f, 20f),
                     false
                 );
                 _fancyMenu.pages[0].subObjects.Add(_profileLabel);
                 
-                // ========================================================
-                // Botón para mostrar y cambiar el número de perfil
-                // ========================================================
                 _profileNumberButton = new SimpleButton(
                     _fancyMenu,
                     _fancyMenu.pages[0],
                     "1",
                     "PROFILE_CHANGE",
-                    new Vector2(startX + 65f, yPos),
-                    new Vector2(60f, 30f)
+                    new Vector2(startX + 65f, yPos + 35f),
+                    new Vector2(70f, 30f)
                 );
                 _fancyMenu.pages[0].subObjects.Add(_profileNumberButton);
                 _profileNumberButton.inactive = true;
                 
-                // ========================================================
-                // Etiqueta "Steam:" - debajo del perfil
-                // ========================================================
                 _steamLabel = new MenuLabel(
                     _fancyMenu,
                     _fancyMenu.pages[0],
                     "Steam:",
-                    new Vector2(startX, yPos - 60f),
+                    new Vector2(startX, yPos + 70f),
                     new Vector2(60f, 20f),
                     false
                 );
                 _fancyMenu.pages[0].subObjects.Add(_steamLabel);
                 
-                // ========================================================
-                // Campo SteamID
-                // ========================================================
                 var dummyOI = new DressMySlugcat.DMSOptions();
                 var steamConfig = new Configurable<string>(
                     dummyOI,
@@ -118,29 +150,25 @@ namespace DMSxMeadow
                 );
                 _steamIdField = new OpTextBox(
                     steamConfig,
-                    new Vector2(startX + 65f, yPos - 60f),
-                    150f
+                    new Vector2(startX + 65f, yPos + 70f),
+                    100f
                 );
                 _steamIdField.allowSpace = false;
                 _steamIdField.maxLength = 20;
-                // OpTextBox se añade al Container, no a subObjects
                 _fancyMenu.pages[0].Container.AddChild(_steamIdField.myContainer);
                 
-                // ========================================================
-                // Etiqueta de estado - debajo del SteamID
-                // ========================================================
                 _statusLabel = new MenuLabel(
                     _fancyMenu,
                     _fancyMenu.pages[0],
                     "",
-                    new Vector2(startX, yPos - 95f),
+                    new Vector2(startX, yPos + 105f),
                     new Vector2(250f, 20f),
                     false
                 );
                 _fancyMenu.pages[0].subObjects.Add(_statusLabel);
                 
                 _uiAdded = true;
-                Plugin.Logger.LogInfo("Meadow profile UI initialized");
+                Plugin.Logger.LogInfo("Meadow profile UI initialized SUCCESSFULLY!");
                 
                 // Eventos
                 _steamIdField.OnValueChanged += OnSteamIdChanged;
@@ -148,6 +176,7 @@ namespace DMSxMeadow
             catch (Exception ex)
             {
                 Plugin.Logger.LogError($"Error initializing meadow UI: {ex.Message}");
+                Plugin.Logger.LogError(ex.StackTrace);
             }
         }
         
@@ -246,21 +275,21 @@ namespace DMSxMeadow
                         
                         var dummyField = _fancyMenu.GetType()
                             .GetField("slugcatDummy", 
-                                System.Reflection.BindingFlags.NonPublic | 
+                                System.Reflection.BindingFlags.Public | 
                                 System.Reflection.BindingFlags.Instance);
                         
                         var dummy = dummyField?.GetValue(_fancyMenu);
                         if (dummy != null)
                         {
                             var updateMethod = dummy.GetType().GetMethod("UpdateSprites", 
-                                System.Reflection.BindingFlags.NonPublic | 
+                                System.Reflection.BindingFlags.Public | 
                                 System.Reflection.BindingFlags.Instance);
                             updateMethod?.Invoke(dummy, null);
                         }
                         
                         var updateControlsMethod = _fancyMenu.GetType()
                             .GetMethod("UpdateControls", 
-                                System.Reflection.BindingFlags.NonPublic | 
+                                System.Reflection.BindingFlags.Public | 
                                 System.Reflection.BindingFlags.Instance);
                         updateControlsMethod?.Invoke(_fancyMenu, null);
                     }
@@ -300,21 +329,21 @@ namespace DMSxMeadow
                 
                 var dummyField = _fancyMenu.GetType()
                     .GetField("slugcatDummy", 
-                        System.Reflection.BindingFlags.NonPublic | 
+                        System.Reflection.BindingFlags.Public | 
                         System.Reflection.BindingFlags.Instance);
                 
                 var dummy = dummyField?.GetValue(_fancyMenu);
                 if (dummy != null)
                 {
                     var updateMethod = dummy.GetType().GetMethod("UpdateSprites", 
-                        System.Reflection.BindingFlags.NonPublic | 
+                        System.Reflection.BindingFlags.Public | 
                         System.Reflection.BindingFlags.Instance);
                     updateMethod?.Invoke(dummy, null);
                 }
                 
                 var updateControlsMethod = _fancyMenu.GetType()
                     .GetMethod("UpdateControls", 
-                        System.Reflection.BindingFlags.NonPublic | 
+                        System.Reflection.BindingFlags.Public | 
                         System.Reflection.BindingFlags.Instance);
                 updateControlsMethod?.Invoke(_fancyMenu, null);
                 
