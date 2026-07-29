@@ -9,7 +9,7 @@ namespace DMSxMeadow
     public class MeadowProfileUI
     {
         private DressMySlugcat.FancyMenu _fancyMenu;
-        private SimpleButton _meadowModeButton;
+        private SelectOneButton _meadowModeButton;  // Cambiado de SimpleButton a SelectOneButton
         private OpTextBox _steamIdField;
         private OpTextBox _profileNumberField;
         private SimpleButton _profileSetButton;
@@ -17,9 +17,7 @@ namespace DMSxMeadow
         private MenuLabel _steamLabel;
         private MenuLabel _profileLabel;
         
-        // El wrapper que permite que los OpTextBox funcionen fuera de ConfigContainer
         private MenuTabWrapper _tabWrapper;
-        
         private bool _uiAdded = false;
         
         public MeadowProfileUI(DressMySlugcat.FancyMenu fancyMenu)
@@ -36,7 +34,7 @@ namespace DMSxMeadow
                 Plugin.Logger.LogInfo("MeadowProfileUI.Initialize() started");
                 
                 // ============================================================
-                // 1. Buscar textBoxBorder (es PUBLIC en DMS)
+                // 1. Buscar textBoxBorder
                 // ============================================================
                 var textBoxBorderField = _fancyMenu.GetType()
                     .GetField("textBoxBorder", 
@@ -59,7 +57,7 @@ namespace DMSxMeadow
                 Plugin.Logger.LogInfo($"textBoxBorder found: pos=({textBoxBorder.pos.x}, {textBoxBorder.pos.y}), size=({textBoxBorder.size.x}, {textBoxBorder.size.y})");
                 
                 // ============================================================
-                // 2. Obtener cantidad de jugadores (es PUBLIC en DMS)
+                // 2. Obtener cantidad de jugadores
                 // ============================================================
                 var playerButtonsField = _fancyMenu.GetType()
                     .GetField("playerButtons", 
@@ -103,21 +101,25 @@ namespace DMSxMeadow
                 Plugin.Logger.LogInfo("MenuTabWrapper created and added to page");
                 
                 // ============================================================
-                // 5. Crear botón MEADOW
+                // 5. Crear botón MEADOW como SelectOneButton
                 // ============================================================
-                _meadowModeButton = new SimpleButton(
+                var meadowArray = new SelectOneButton[1];
+                _meadowModeButton = new SelectOneButton(
                     _fancyMenu,
                     _fancyMenu.pages[0],
                     "MEADOW",
-                    "MEADOW_TOGGLE",
+                    "MEADOW_SERIES",           // Serie propia, separada de PLAYER_
                     new Vector2(startX, yPos),
-                    new Vector2(80f, 30f)
+                    new Vector2(80f, 30f),
+                    meadowArray,
+                    0
                 );
+                meadowArray[0] = _meadowModeButton;
                 _fancyMenu.pages[0].subObjects.Add(_meadowModeButton);
-                Plugin.Logger.LogInfo($"MEADOW button added at ({startX}, {yPos})");
+                Plugin.Logger.LogInfo($"MEADOW SelectOneButton added at ({startX}, {yPos})");
                 
                 // ============================================================
-                // 6. Crear controles: Profile (con campo escribible + botón SET)
+                // 6. Crear controles: Profile (campo + botón SET)
                 // ============================================================
                 float yOffset = 0f;
                 
@@ -131,7 +133,6 @@ namespace DMSxMeadow
                 );
                 _fancyMenu.pages[0].subObjects.Add(_profileLabel);
                 
-                // --- Campo para escribir el número de perfil ---
                 var dummyOI = new DressMySlugcat.DMSOptions();
                 var profileNumberConfig = new Configurable<string>(
                     dummyOI,
@@ -146,12 +147,9 @@ namespace DMSxMeadow
                 );
                 _profileNumberField.allowSpace = false;
                 _profileNumberField.maxLength = 3;
-                
-                // Usar UIelementWrapper en lugar de Container.AddChild
                 new UIelementWrapper(_tabWrapper, _profileNumberField);
                 Plugin.Logger.LogInfo($"Profile number field added at ({startX + 65f}, {yPos + 35f + yOffset})");
                 
-                // --- Botón SET ---
                 _profileSetButton = new SimpleButton(
                     _fancyMenu,
                     _fancyMenu.pages[0],
@@ -191,8 +189,6 @@ namespace DMSxMeadow
                 );
                 _steamIdField.allowSpace = false;
                 _steamIdField.maxLength = 20;
-                
-                // Usar UIelementWrapper en lugar de Container.AddChild
                 new UIelementWrapper(_tabWrapper, _steamIdField);
                 Plugin.Logger.LogInfo($"Steam ID field added at ({startX + 65f}, {yPos + 35f + yOffset})");
                 
@@ -236,7 +232,6 @@ namespace DMSxMeadow
                 
                 if (!MeadowProfileManager.IsMeadowModeActive) return;
                 
-                // Si el valor es "unassigned", lo tratamos como vacío
                 string cleanValue = (newValue == "unassigned") ? "" : newValue;
                 int profileNumber = MeadowProfileManager.CurrentProfileNumber;
                 MeadowProfileManager.SetSteamID(profileNumber, cleanValue);
@@ -259,12 +254,10 @@ namespace DMSxMeadow
                 Plugin.Logger.LogError($"Error in OnProfileNumberChanged: {ex.Message}");
             }
             
-            // Solo validamos, no hacemos nada automático
             if (string.IsNullOrEmpty(newValue)) return;
             
             if (!int.TryParse(newValue, out int n) || n < 1 || n > 99)
             {
-                // Si es inválido, revertir al valor anterior
                 _profileNumberField.value = oldValue;
             }
         }
@@ -296,17 +289,13 @@ namespace DMSxMeadow
                 return;
             }
             
-            // Guardar el perfil actual antes de cambiar
             SaveCurrentProfile();
             
-            // Cargar el nuevo perfil
             MeadowProfileManager.SetCurrentProfile(profileNumber);
             _profileNumberField.value = profileNumber.ToString();
             
-            // Cargar la skin
             LoadProfile(profileNumber);
             
-            // Actualizar Steam ID
             string steamId = MeadowProfileManager.GetSteamID(profileNumber);
             _steamIdField.value = string.IsNullOrEmpty(steamId) ? "unassigned" : steamId;
             
@@ -373,7 +362,6 @@ namespace DMSxMeadow
                             });
                         }
                         
-                        // Actualizar dummy
                         var dummyField = _fancyMenu.GetType()
                             .GetField("slugcatDummy", 
                                 System.Reflection.BindingFlags.Public | 
@@ -403,7 +391,7 @@ namespace DMSxMeadow
         }
         
         // ============================================================
-        // Toggle Meadow Mode
+        // Toggle Meadow Mode - Actualizado
         // ============================================================
         public void ToggleMeadowMode()
         {
@@ -425,6 +413,9 @@ namespace DMSxMeadow
                 _steamIdField.value = string.IsNullOrEmpty(steamId) ? "unassigned" : steamId;
                 
                 LoadProfile(profileNumber);
+                
+                // El marco de selección ahora lo maneja el hook de GetCurrentlySelectedOfSeries
+                // No tocamos selectedPlayerIndex directamente
                 
                 Plugin.Logger.LogInfo("Meadow mode activated");
             }

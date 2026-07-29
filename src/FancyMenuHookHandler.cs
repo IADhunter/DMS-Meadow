@@ -11,12 +11,16 @@ namespace DMSxMeadow
     {
         private static Hook signalHook;
         private static Hook updateHook;
+        private static Hook getSelectedHook;
+        private static Hook setSelectedHook;
         private static Dictionary<DressMySlugcat.FancyMenu, MeadowProfileUI> _uiInstances = new Dictionary<DressMySlugcat.FancyMenu, MeadowProfileUI>();
         
         public static void Initialize()
         {
             try
             {
+                Type fancyMenuType = typeof(DressMySlugcat.FancyMenu);
+                
                 // ============================================================
                 // HOOK 1: ProcessManager.Update (para detectar FancyMenu)
                 // ============================================================
@@ -37,7 +41,7 @@ namespace DMSxMeadow
                 // ============================================================
                 // HOOK 2: FancyMenu.Singal (para manejar eventos de la UI)
                 // ============================================================
-                MethodInfo signalMethod = typeof(DressMySlugcat.FancyMenu).GetMethod("Singal");
+                MethodInfo signalMethod = fancyMenuType.GetMethod("Singal");
                 if (signalMethod != null)
                 {
                     MethodInfo hookSignal = typeof(FancyMenuHookHandler)
@@ -50,6 +54,40 @@ namespace DMSxMeadow
                         Plugin.Logger.LogInfo("FancyMenu.Singal hooked");
                     }
                 }
+                
+                // ============================================================
+                // HOOK 3: GetCurrentlySelectedOfSeries (para controlar el marco)
+                // ============================================================
+                MethodInfo getSelMethod = fancyMenuType.GetMethod("GetCurrentlySelectedOfSeries");
+                if (getSelMethod != null)
+                {
+                    MethodInfo hookGetSel = typeof(FancyMenuHookHandler)
+                        .GetMethod("GetSelected_Hook", 
+                            BindingFlags.NonPublic | BindingFlags.Static);
+                    
+                    if (hookGetSel != null)
+                    {
+                        getSelectedHook = new Hook(getSelMethod, hookGetSel);
+                        Plugin.Logger.LogInfo("GetCurrentlySelectedOfSeries hooked");
+                    }
+                }
+                
+                // ============================================================
+                // HOOK 4: SetCurrentlySelectedOfSeries (para manejar clicks en MEADOW)
+                // ============================================================
+                MethodInfo setSelMethod = fancyMenuType.GetMethod("SetCurrentlySelectedOfSeries");
+                if (setSelMethod != null)
+                {
+                    MethodInfo hookSetSel = typeof(FancyMenuHookHandler)
+                        .GetMethod("SetSelected_Hook", 
+                            BindingFlags.NonPublic | BindingFlags.Static);
+                    
+                    if (hookSetSel != null)
+                    {
+                        setSelectedHook = new Hook(setSelMethod, hookSetSel);
+                        Plugin.Logger.LogInfo("SetCurrentlySelectedOfSeries hooked");
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -58,7 +96,7 @@ namespace DMSxMeadow
         }
         
         // ============================================================
-        // HOOK DE Update - Se ejecuta cada frame
+        // HOOK DE Update
         // ============================================================
         private static void Update_Hook(
             Action<ProcessManager, float> orig,
@@ -69,7 +107,6 @@ namespace DMSxMeadow
             
             try
             {
-                // Verificar si currentMainLoop es FancyMenu
                 if (self.currentMainLoop is DressMySlugcat.FancyMenu fancyMenu)
                 {
                     if (!_uiInstances.ContainsKey(fancyMenu))
@@ -79,14 +116,62 @@ namespace DMSxMeadow
                         ui.Initialize();
                         _uiInstances[fancyMenu] = ui;
                     }
-                    
-                    // TickControls ya no es necesario - MenuTabWrapper maneja el update automáticamente
                 }
             }
             catch (Exception ex)
             {
                 Plugin.Logger.LogError($"Error in Update hook: {ex.Message}");
             }
+        }
+        
+        // ============================================================
+        // HOOK DE GetCurrentlySelectedOfSeries
+        // ============================================================
+        private static int GetSelected_Hook(
+            Func<DressMySlugcat.FancyMenu, string, int> orig,
+            DressMySlugcat.FancyMenu self,
+            string series)
+        {
+            // Si es la serie de MEADOW, devolver 0 si está activo, -1 si no
+            if (series == "MEADOW_SERIES")
+            {
+                return MeadowProfileManager.IsMeadowModeActive ? 0 : -1;
+            }
+            
+            // Si es la serie de PLAYER_ y Meadow está activo, devolver -1
+            // Esto hace que el marco desaparezca de los botones Player 1-4
+            if (MeadowProfileManager.IsMeadowModeActive && series.StartsWith("PLAYER_"))
+            {
+                return -1;
+            }
+            
+            return orig(self, series);
+        }
+        
+        // ============================================================
+        // HOOK DE SetCurrentlySelectedOfSeries
+        // ============================================================
+        private static void SetSelected_Hook(
+            Action<DressMySlugcat.FancyMenu, string, int> orig,
+            DressMySlugcat.FancyMenu self,
+            string series,
+            int to)
+        {
+            // Si es la serie de MEADOW, manejar el toggle nosotros
+            if (series == "MEADOW_SERIES")
+            {
+                if (_uiInstances.TryGetValue(self, out var ui))
+                {
+                    // Solo toggle si no estábamos ya seleccionados
+                    // SelectOneButton.Clicked() llama a SetSelected incluso si ya está seleccionado
+                    // pero nosotros queremos toggle siempre
+                    ui.HandleSignal("MEADOW_TOGGLE");
+                }
+                return; // No llamar a orig, nosotros manejamos el toggle
+            }
+            
+            // Para todo lo demás (PLAYER_, SLUGCAT_, etc.), dejar que DMS maneje
+            orig(self, series, to);
         }
         
         // ============================================================
@@ -146,6 +231,8 @@ namespace DMSxMeadow
         {
             updateHook?.Dispose();
             signalHook?.Dispose();
+            getSelectedHook?.Dispose();
+            setSelectedHook?.Dispose();
             _uiInstances.Clear();
             Plugin.Logger.LogInfo("FancyMenu hooks disposed");
         }
