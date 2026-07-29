@@ -80,11 +80,7 @@ namespace DMSxMeadow
                         _uiInstances[fancyMenu] = ui;
                     }
                     
-                    // IMPORTANTE: Dar tick a los controles de UI para que funcionen
-                    if (_uiInstances.TryGetValue(fancyMenu, out var meadowUI))
-                    {
-                        meadowUI.TickControls();
-                    }
+                    // TickControls ya no es necesario - MenuTabWrapper maneja el update automáticamente
                 }
             }
             catch (Exception ex)

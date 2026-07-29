@@ -1,4 +1,5 @@
 using Menu;
+using Menu.Remix;
 using Menu.Remix.MixedUI;
 using System;
 using UnityEngine;
@@ -9,13 +10,15 @@ namespace DMSxMeadow
     {
         private DressMySlugcat.FancyMenu _fancyMenu;
         private SimpleButton _meadowModeButton;
-        // Eliminado: private SimpleButton _profileNumberButton; (ya no se usa)
         private OpTextBox _steamIdField;
         private OpTextBox _profileNumberField;
         private SimpleButton _profileSetButton;
         private MenuLabel _statusLabel;
         private MenuLabel _steamLabel;
         private MenuLabel _profileLabel;
+        
+        // El wrapper que permite que los OpTextBox funcionen fuera de ConfigContainer
+        private MenuTabWrapper _tabWrapper;
         
         private bool _uiAdded = false;
         
@@ -93,7 +96,14 @@ namespace DMSxMeadow
                 Plugin.Logger.LogInfo($"Button position: X={startX}, Y={yPos}");
                 
                 // ============================================================
-                // 4. Crear botón MEADOW
+                // 4. Crear MenuTabWrapper - Necesario para OpTextBox
+                // ============================================================
+                _tabWrapper = new MenuTabWrapper(_fancyMenu, _fancyMenu.pages[0]);
+                _fancyMenu.pages[0].subObjects.Add(_tabWrapper);
+                Plugin.Logger.LogInfo("MenuTabWrapper created and added to page");
+                
+                // ============================================================
+                // 5. Crear botón MEADOW
                 // ============================================================
                 _meadowModeButton = new SimpleButton(
                     _fancyMenu,
@@ -107,7 +117,7 @@ namespace DMSxMeadow
                 Plugin.Logger.LogInfo($"MEADOW button added at ({startX}, {yPos})");
                 
                 // ============================================================
-                // 5. Crear controles: Profile (con campo escribible + botón SET)
+                // 6. Crear controles: Profile (con campo escribible + botón SET)
                 // ============================================================
                 float yOffset = 0f;
                 
@@ -136,7 +146,10 @@ namespace DMSxMeadow
                 );
                 _profileNumberField.allowSpace = false;
                 _profileNumberField.maxLength = 3;
-                _fancyMenu.pages[0].Container.AddChild(_profileNumberField.myContainer);
+                
+                // Usar UIelementWrapper en lugar de Container.AddChild
+                new UIelementWrapper(_tabWrapper, _profileNumberField);
+                Plugin.Logger.LogInfo($"Profile number field added at ({startX + 65f}, {yPos + 35f + yOffset})");
                 
                 // --- Botón SET ---
                 _profileSetButton = new SimpleButton(
@@ -151,7 +164,7 @@ namespace DMSxMeadow
                 _profileSetButton.inactive = true;
                 
                 // ============================================================
-                // 6. Steam ID (campo escribible)
+                // 7. Steam ID (campo escribible)
                 // ============================================================
                 yOffset = 35f;
                 
@@ -178,10 +191,13 @@ namespace DMSxMeadow
                 );
                 _steamIdField.allowSpace = false;
                 _steamIdField.maxLength = 20;
-                _fancyMenu.pages[0].Container.AddChild(_steamIdField.myContainer);
+                
+                // Usar UIelementWrapper en lugar de Container.AddChild
+                new UIelementWrapper(_tabWrapper, _steamIdField);
+                Plugin.Logger.LogInfo($"Steam ID field added at ({startX + 65f}, {yPos + 35f + yOffset})");
                 
                 // ============================================================
-                // 7. Status Label
+                // 8. Status Label
                 // ============================================================
                 yOffset = 70f;
                 
@@ -210,30 +226,14 @@ namespace DMSxMeadow
         }
         
         // ============================================================
-        // Tick manual - Necesario para que los OpTextBox reciban input
-        // ============================================================
-        public void TickControls()
-        {
-            if (!_uiAdded) return;
-            
-            try
-            {
-                _steamIdField?.Update();
-                _profileNumberField?.Update();
-            }
-            catch
-            {
-                // Silencioso para no spamear logs
-            }
-        }
-        
-        // ============================================================
         // Eventos
         // ============================================================
         private void OnSteamIdChanged(UIconfig sender, string oldValue, string newValue)
         {
             try
             {
+                Plugin.Logger.LogInfo($"OnSteamIdChanged called: old='{oldValue}', new='{newValue}'");
+                
                 if (!MeadowProfileManager.IsMeadowModeActive) return;
                 
                 // Si el valor es "unassigned", lo tratamos como vacío
@@ -250,6 +250,15 @@ namespace DMSxMeadow
         
         private void OnProfileNumberChanged(UIconfig sender, string oldValue, string newValue)
         {
+            try
+            {
+                Plugin.Logger.LogInfo($"OnProfileNumberChanged called: old='{oldValue}', new='{newValue}'");
+            }
+            catch (Exception ex)
+            {
+                Plugin.Logger.LogError($"Error in OnProfileNumberChanged: {ex.Message}");
+            }
+            
             // Solo validamos, no hacemos nada automático
             if (string.IsNullOrEmpty(newValue)) return;
             
@@ -265,6 +274,8 @@ namespace DMSxMeadow
         // ============================================================
         private void SetProfileNumber()
         {
+            Plugin.Logger.LogInfo($"SetProfileNumber called - MeadowMode: {MeadowProfileManager.IsMeadowModeActive}, value: '{_profileNumberField?.value}'");
+            
             if (!MeadowProfileManager.IsMeadowModeActive)
             {
                 _statusLabel.text = "Meadow mode is OFF";
@@ -396,6 +407,8 @@ namespace DMSxMeadow
         // ============================================================
         public void ToggleMeadowMode()
         {
+            Plugin.Logger.LogInfo($"ToggleMeadowMode called - Current: {MeadowProfileManager.IsMeadowModeActive}");
+            
             MeadowProfileManager.IsMeadowModeActive = !MeadowProfileManager.IsMeadowModeActive;
             
             bool active = MeadowProfileManager.IsMeadowModeActive;
@@ -454,6 +467,8 @@ namespace DMSxMeadow
         // ============================================================
         public void HandleSignal(string message)
         {
+            Plugin.Logger.LogInfo($"HandleSignal: {message}");
+            
             if (message == "MEADOW_TOGGLE")
             {
                 ToggleMeadowMode();
