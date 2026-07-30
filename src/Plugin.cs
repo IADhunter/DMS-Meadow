@@ -69,7 +69,7 @@ namespace DMSxMeadow
         }
         
         // ============================================================
-        // Customization_For_Hook - CON EL FIX DE STEAMID
+        // Customization_For_Hook - SIN EXCLUSIÓN DE isMe
         // ============================================================
         private static DressMySlugcat.Customization Customization_For_Hook(
             Func<Player, bool, DressMySlugcat.Customization> orig,
@@ -84,36 +84,42 @@ namespace DMSxMeadow
                         player.abstractCreature, out var onlineEntity))
                     {
                         var owner = onlineEntity.owner;
-                        if (owner != null && !owner.isMe && owner.id != null)
+                        
+                        // ✅ ELIMINADO: !owner.isMe - AHORA TAMBIÉN APLICA AL JUGADOR LOCAL
+                        if (owner != null && owner.id != null)
                         {
-                            // ============================================================
-                            // FIX: Obtener SteamID64 real, NO el nombre de usuario
-                            // ============================================================
                             string steamId;
                             if (owner.id is RainMeadow.SteamMatchmakingManager.SteamPlayerId steamPlayerId)
                             {
-                                // SteamID64 real, ej: 76561198000000000
                                 steamId = steamPlayerId.steamID.m_SteamID.ToString();
-                                Logger.LogInfo($"Detected SteamPlayerId: {steamId}");
+                                Logger.LogInfo($"Detected SteamPlayerId: {steamId} (isMe: {owner.isMe})");
                             }
                             else
                             {
-                                // Fallback para LAN u otros métodos de conexión
                                 steamId = owner.id.ToString();
-                                Logger.LogInfo($"Detected non-Steam PlayerId: {steamId}");
+                                Logger.LogInfo($"Detected non-Steam PlayerId: {steamId} (isMe: {owner.isMe})");
                             }
                             
                             var customization = MeadowProfileManager.GetCustomizationBySteamID(steamId);
                             if (customization != null)
                             {
-                                Logger.LogInfo($"Found meadow profile for SteamID: {steamId}");
+                                Logger.LogInfo($"✅ Found meadow profile for SteamID: {steamId} (isMe: {owner.isMe})");
                                 var result = customization.Copy();
+                                
+                                // ✅ PlayerNumber se mantiene en 0 para compatibilidad
+                                //    pero no se fuerza a 0 si el perfil ya tiene otro valor
+                                //    (aunque en la práctica todos los perfiles Meadow usan 0)
                                 result.PlayerNumber = 0;
+                                
+                                // Log detallado para depuración
+                                Logger.LogInfo($"   - Tail.Length: {result.CustomTail.Length}");
+                                Logger.LogInfo($"   - CustomSprites: {result.CustomSprites.Count}");
+                                
                                 return result;
                             }
                             else
                             {
-                                Logger.LogInfo($"No meadow profile found for SteamID: {steamId}");
+                                Logger.LogInfo($"No meadow profile found for SteamID: {steamId} (isMe: {owner.isMe})");
                             }
                         }
                     }
@@ -122,6 +128,7 @@ namespace DMSxMeadow
             catch (Exception ex)
             {
                 Logger.LogError($"Hook error: {ex.Message}");
+                Logger.LogError(ex.StackTrace);
             }
             
             return orig(player, mergeDefaults);
