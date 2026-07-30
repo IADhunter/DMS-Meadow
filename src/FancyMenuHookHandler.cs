@@ -114,7 +114,7 @@ namespace DMSxMeadow
         }
         
         // ============================================================
-        // HOOK DE Update - CON LLAMADA A CheckFieldFocusLoss
+        // HOOK DE Update - CON DETECCIÓN PARA DIÁLOGOS
         // ============================================================
         private static void Update_Hook(
             Action<ProcessManager, float> orig,
@@ -125,23 +125,68 @@ namespace DMSxMeadow
             
             try
             {
+                // ============================================================
+                // CASO 1: FancyMenu como currentMainLoop (menú principal)
+                // ============================================================
                 if (self.currentMainLoop is DressMySlugcat.FancyMenu fancyMenu)
                 {
                     if (!_uiInstances.ContainsKey(fancyMenu))
                     {
-                        Plugin.Logger.LogInfo("FancyMenu detected in Update hook - creating UI");
+                        Plugin.Logger.LogInfo("FancyMenu detected as currentMainLoop - creating UI");
                         var ui = new MeadowProfileUI(fancyMenu);
                         ui.Initialize();
                         _uiInstances[fancyMenu] = ui;
                     }
                     else
                     {
-                        // ============================================================
-                        // LLAMAR CADA FRAME PARA DETECTAR PÉRDIDA DE FOCO
-                        // ============================================================
                         if (_uiInstances.TryGetValue(fancyMenu, out var ui))
                         {
                             ui.CheckFieldFocusLoss();
+                        }
+                    }
+                }
+                
+                // ============================================================
+                // CASO 2: FancyMenu como diálogo (menú de pausa)
+                // ============================================================
+                if (self.dialog is DressMySlugcat.FancyMenu fancyMenuDialog)
+                {
+                    if (!_uiInstances.ContainsKey(fancyMenuDialog))
+                    {
+                        Plugin.Logger.LogInfo("FancyMenu detected as dialog (pause menu) - creating UI");
+                        var ui = new MeadowProfileUI(fancyMenuDialog);
+                        ui.Initialize();
+                        _uiInstances[fancyMenuDialog] = ui;
+                    }
+                    else
+                    {
+                        if (_uiInstances.TryGetValue(fancyMenuDialog, out var ui))
+                        {
+                            ui.CheckFieldFocusLoss();
+                        }
+                    }
+                }
+                
+                // ============================================================
+                // CASO 3: También buscar en sideProcesses por si acaso
+                // ============================================================
+                foreach (var process in self.sideProcesses)
+                {
+                    if (process is DressMySlugcat.FancyMenu fancyMenuSide)
+                    {
+                        if (!_uiInstances.ContainsKey(fancyMenuSide))
+                        {
+                            Plugin.Logger.LogInfo("FancyMenu detected in sideProcesses - creating UI");
+                            var ui = new MeadowProfileUI(fancyMenuSide);
+                            ui.Initialize();
+                            _uiInstances[fancyMenuSide] = ui;
+                        }
+                        else
+                        {
+                            if (_uiInstances.TryGetValue(fancyMenuSide, out var ui))
+                            {
+                                ui.CheckFieldFocusLoss();
+                            }
                         }
                     }
                 }

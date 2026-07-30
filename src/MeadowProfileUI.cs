@@ -632,18 +632,19 @@ namespace DMSxMeadow
             Plugin.Logger.LogInfo("Meadow mode deactivated and native profile restored");
         }
         
+        // ============================================================
+        // FIX: ToggleMeadowMode - SOLO ACTIVAR, NUNCA DESACTIVAR
+        // ============================================================
         public void ToggleMeadowMode()
         {
-            if (MeadowProfileManager.IsMeadowModeActive)
-            {
-                DeactivateMeadowMode();
-            }
-            else
+            // Solo activar, nunca desactivar con este botón
+            // La desactivación solo debe ocurrir al seleccionar un Player (1-4)
+            if (!MeadowProfileManager.IsMeadowModeActive)
             {
                 ActivateMeadowMode();
+                _fancyMenu.PlaySound(SoundID.MENU_Switch_Page_Out);
             }
-            
-            _fancyMenu.PlaySound(SoundID.MENU_Switch_Page_Out);
+            // Si ya está activo, ignorar el clic silenciosamente
         }
         
         public void HandleSignal(string message)
