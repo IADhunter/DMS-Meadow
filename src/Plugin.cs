@@ -28,7 +28,7 @@ namespace DMSxMeadow
                 Logger.LogInfo("Initializing DMS x Meadow v2.0...");
                 
                 MeadowProfileManager.Load();
-                MeadowProfileManager.LogAllAssignments(); // <-- Diagnóstico
+                MeadowProfileManager.LogAllAssignments();
                 InitializeHooks();
                 FancyMenuHookHandler.Initialize();
                 
@@ -68,6 +68,9 @@ namespace DMSxMeadow
             }
         }
         
+        // ============================================================
+        // Customization_For_Hook - CON EL FIX DE STEAMID
+        // ============================================================
         private static DressMySlugcat.Customization Customization_For_Hook(
             Func<Player, bool, DressMySlugcat.Customization> orig,
             Player player,
@@ -83,7 +86,22 @@ namespace DMSxMeadow
                         var owner = onlineEntity.owner;
                         if (owner != null && !owner.isMe && owner.id != null)
                         {
-                            string steamId = owner.id.ToString();
+                            // ============================================================
+                            // FIX: Obtener SteamID64 real, NO el nombre de usuario
+                            // ============================================================
+                            string steamId;
+                            if (owner.id is RainMeadow.SteamMatchmakingManager.SteamPlayerId steamPlayerId)
+                            {
+                                // SteamID64 real, ej: 76561198000000000
+                                steamId = steamPlayerId.steamID.m_SteamID.ToString();
+                                Logger.LogInfo($"Detected SteamPlayerId: {steamId}");
+                            }
+                            else
+                            {
+                                // Fallback para LAN u otros métodos de conexión
+                                steamId = owner.id.ToString();
+                                Logger.LogInfo($"Detected non-Steam PlayerId: {steamId}");
+                            }
                             
                             var customization = MeadowProfileManager.GetCustomizationBySteamID(steamId);
                             if (customization != null)
@@ -92,6 +110,10 @@ namespace DMSxMeadow
                                 var result = customization.Copy();
                                 result.PlayerNumber = 0;
                                 return result;
+                            }
+                            else
+                            {
+                                Logger.LogInfo($"No meadow profile found for SteamID: {steamId}");
                             }
                         }
                     }

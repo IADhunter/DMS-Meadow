@@ -65,6 +65,14 @@
       <HintPath>..\lib\Rain Meadow.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    
+    <!-- ============================================================ -->
+    <!-- Steamworks.NET - necesaria para CSteamID                      -->
+    <!-- ============================================================ -->
+    <Reference Include="com.rlabrecque.steamworks.net">
+      <HintPath>..\lib\com.rlabrecque.steamworks.net.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 
   <Target Name="GenerateMod" AfterTargets="PostBuildEvent" Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
