@@ -9,8 +9,7 @@ namespace DMSxMeadow
     [Serializable]
     public class MeadowProfileData
     {
-        public int InternalProfileNumber; // 5, 6, 7, ...
-        public string SteamID = "";
+        public int InternalProfileNumber; // 5, 6, 7, ... (offset +4)
         public DressMySlugcat.Customization Customization;
         public DateTime LastUpdated = DateTime.Now;
     }
@@ -25,8 +24,17 @@ namespace DMSxMeadow
 
     public static class MeadowProfileManager
     {
+        // ============================================================
+        // ARCHIVO 1: Datos de ropa de perfiles extendidos (meadowcustom.dat)
+        // ============================================================
         private static string RootPath => $"{Application.persistentDataPath}{Path.DirectorySeparatorChar}dressmyslugcat{Path.DirectorySeparatorChar}";
         private static string SaveFile => RootPath + "meadowcustom.dat";
+        
+        // ============================================================
+        // ARCHIVO 2: Asignaciones SteamID -> Perfil (dmsxmeadow.txt)
+        // ============================================================
+        private static string AssignmentsRootPath => $"{Application.persistentDataPath}{Path.DirectorySeparatorChar}dmsxmeadow{Path.DirectorySeparatorChar}";
+        private static string AssignmentsFile => AssignmentsRootPath + "dmsxmeadow.txt";
         
         private static MeadowDatabase _database;
         public static MeadowDatabase Database => _database ??= Load();
@@ -36,9 +44,18 @@ namespace DMSxMeadow
         
         private const int PROFILE_OFFSET = 4; // Los perfiles 1-4 son de DMS, nosotros usamos 5+
         
+        // ============================================================
+        // MAPA DE ASIGNACIONES SteamID -> ProfileNumber (en memoria)
+        // ============================================================
+        private static Dictionary<string, int> _assignments = new Dictionary<string, int>();
+        private static bool _assignmentsLoaded = false;
+        
         public static int GetInternalProfile(int displayNumber) => displayNumber + PROFILE_OFFSET;
         public static int GetDisplayNumber(int internalNumber) => internalNumber - PROFILE_OFFSET;
         
+        // ============================================================
+        // CARGAR / GUARDAR PERFILES EXTENDIDOS (meadowcustom.dat)
+        // ============================================================
         public static MeadowDatabase Load()
         {
             try
@@ -95,6 +112,81 @@ namespace DMSxMeadow
             }
         }
         
+        // ============================================================
+        // CARGAR / GUARDAR ASIGNACIONES (dmsxmeadow.txt)
+        // ============================================================
+        private static void LoadAssignments()
+        {
+            if (_assignmentsLoaded) return;
+            _assignmentsLoaded = true;
+            _assignments.Clear();
+            
+            try
+            {
+                if (File.Exists(AssignmentsFile))
+                {
+                    var lines = File.ReadAllLines(AssignmentsFile);
+                    foreach (var line in lines)
+                    {
+                        var trimmed = line.Trim();
+                        // Saltar líneas vacías y comentarios
+                        if (string.IsNullOrEmpty(trimmed) || trimmed.StartsWith("#")) continue;
+                        
+                        var parts = trimmed.Split(':');
+                        if (parts.Length == 2 && int.TryParse(parts[1], out int profileNumber))
+                        {
+                            var steamId = parts[0].Trim();
+                            if (!string.IsNullOrEmpty(steamId))
+                            {
+                                _assignments[steamId] = profileNumber;
+                                Plugin.Logger.LogInfo($"Loaded assignment: '{steamId}' -> profile {profileNumber}");
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    Plugin.Logger.LogInfo($"No assignments file found at {AssignmentsFile}, creating new one");
+                }
+            }
+            catch (Exception ex)
+            {
+                Plugin.Logger.LogError($"Error loading assignments: {ex.Message}");
+            }
+        }
+        
+        public static void SaveAssignments()
+        {
+            try
+            {
+                if (!Directory.Exists(AssignmentsRootPath))
+                {
+                    Directory.CreateDirectory(AssignmentsRootPath);
+                }
+                
+                var lines = new List<string>();
+                lines.Add("# SteamID:ProfileNumber");
+                lines.Add("# Format: STEAM_0:1:12345678:5");
+                lines.Add("# or 76561198000000000:6");
+                lines.Add("");
+                
+                foreach (var kvp in _assignments)
+                {
+                    lines.Add($"{kvp.Key}:{kvp.Value}");
+                }
+                
+                File.WriteAllLines(AssignmentsFile, lines);
+                Plugin.Logger.LogInfo($"Assignments saved: {AssignmentsFile} ({_assignments.Count} entries)");
+            }
+            catch (Exception ex)
+            {
+                Plugin.Logger.LogError($"Error saving assignments: {ex.Message}");
+            }
+        }
+        
+        // ============================================================
+        // OPERACIONES CON PERFILES
+        // ============================================================
         public static MeadowProfileData GetOrCreateProfile(int displayNumber)
         {
             if (displayNumber < 1 || displayNumber > Database.MaxProfiles)
@@ -115,7 +207,6 @@ namespace DMSxMeadow
                 profile = new MeadowProfileData
                 {
                     InternalProfileNumber = internalNumber,
-                    SteamID = "",
                     Customization = null
                 };
                 Database.Profiles[internalNumber] = profile;
@@ -137,7 +228,7 @@ namespace DMSxMeadow
             
             if (profile.Customization != null)
             {
-                Plugin.Logger.LogInfo($"Loaded meadow profile {displayNumber} (internal: {profile.InternalProfileNumber}) with SteamID: {profile.SteamID}");
+                Plugin.Logger.LogInfo($"Loaded meadow profile {displayNumber} (internal: {profile.InternalProfileNumber})");
             }
             else
             {
@@ -153,27 +244,11 @@ namespace DMSxMeadow
             var profile = GetOrCreateProfile(CurrentProfileNumber);
             if (profile == null) return;
             
-            // Guardar copia
             profile.Customization = customization.Copy();
             profile.LastUpdated = DateTime.Now;
             Save();
             
             Plugin.Logger.LogInfo($"Saved meadow profile {CurrentProfileNumber} (internal: {profile.InternalProfileNumber})");
-        }
-        
-        public static void SetSteamID(int displayNumber, string steamID)
-        {
-            var profile = GetOrCreateProfile(displayNumber);
-            if (profile == null) return;
-            
-            profile.SteamID = steamID ?? "";
-            Save();
-        }
-        
-        public static string GetSteamID(int displayNumber)
-        {
-            var profile = GetOrCreateProfile(displayNumber);
-            return profile?.SteamID ?? "";
         }
         
         public static DressMySlugcat.Customization GetProfileCustomization(int displayNumber)
@@ -182,17 +257,103 @@ namespace DMSxMeadow
             return profile?.Customization;
         }
         
-        // Método para obtener la customización por SteamID (para el hook)
-        public static DressMySlugcat.Customization GetCustomizationBySteamID(string steamId)
+        // ============================================================
+        // OPERACIONES CON ASIGNACIONES SteamID
+        // ============================================================
+        public static void SetSteamID(int displayNumber, string steamID)
         {
-            foreach (var kvp in Database.Profiles)
+            LoadAssignments();
+            
+            // Si SteamID está vacío, eliminar la asignación
+            if (string.IsNullOrEmpty(steamID))
             {
-                if (kvp.Value.SteamID == steamId && kvp.Value.Customization != null)
+                // Buscar y eliminar cualquier asignación existente para este perfil
+                string keyToRemove = null;
+                foreach (var kvp in _assignments)
                 {
-                    return kvp.Value.Customization;
+                    if (kvp.Value == displayNumber)
+                    {
+                        keyToRemove = kvp.Key;
+                        break;
+                    }
+                }
+                if (keyToRemove != null)
+                {
+                    _assignments.Remove(keyToRemove);
+                    Plugin.Logger.LogInfo($"Removed assignment for profile {displayNumber}");
+                }
+                SaveAssignments();
+                return;
+            }
+            
+            // Si el SteamID ya existe en otra asignación, eliminarlo primero
+            if (_assignments.ContainsKey(steamID))
+            {
+                var existingProfile = _assignments[steamID];
+                if (existingProfile != displayNumber)
+                {
+                    Plugin.Logger.LogWarning($"SteamID '{steamID}' was assigned to profile {existingProfile}, reassigning to {displayNumber}");
                 }
             }
+            
+            _assignments[steamID] = displayNumber;
+            SaveAssignments();
+            Plugin.Logger.LogInfo($"Assigned SteamID '{steamID}' -> profile {displayNumber}");
+        }
+        
+        public static string GetSteamID(int displayNumber)
+        {
+            LoadAssignments();
+            
+            foreach (var kvp in _assignments)
+            {
+                if (kvp.Value == displayNumber)
+                {
+                    return kvp.Key;
+                }
+            }
+            return "";
+        }
+        
+        public static int GetProfileBySteamID(string steamID)
+        {
+            LoadAssignments();
+            
+            if (string.IsNullOrEmpty(steamID)) return -1;
+            
+            if (_assignments.TryGetValue(steamID, out int profileNumber))
+            {
+                return profileNumber;
+            }
+            return -1;
+        }
+        
+        public static DressMySlugcat.Customization GetCustomizationBySteamID(string steamId)
+        {
+            LoadAssignments();
+            
+            if (string.IsNullOrEmpty(steamId)) return null;
+            
+            if (_assignments.TryGetValue(steamId, out int profileNumber))
+            {
+                return GetProfileCustomization(profileNumber);
+            }
             return null;
+        }
+        
+        // ============================================================
+        // DIAGNÓSTICO: Mostrar todas las asignaciones en log
+        // ============================================================
+        public static void LogAllAssignments()
+        {
+            LoadAssignments();
+            
+            Plugin.Logger.LogInfo($"=== ASSIGNMENTS ({_assignments.Count}) ===");
+            foreach (var kvp in _assignments)
+            {
+                Plugin.Logger.LogInfo($"  {kvp.Key} -> profile {kvp.Value}");
+            }
+            Plugin.Logger.LogInfo("=== END ASSIGNMENTS ===");
         }
     }
 }

@@ -13,6 +13,7 @@ namespace DMSxMeadow
         private static Hook updateHook;
         private static Hook getSelectedHook;
         private static Hook setSelectedHook;
+        private static Hook shutdownHook;
         private static Dictionary<DressMySlugcat.FancyMenu, MeadowProfileUI> _uiInstances = new Dictionary<DressMySlugcat.FancyMenu, MeadowProfileUI>();
         
         public static void Initialize()
@@ -22,7 +23,7 @@ namespace DMSxMeadow
                 Type fancyMenuType = typeof(DressMySlugcat.FancyMenu);
                 
                 // ============================================================
-                // HOOK 1: ProcessManager.Update (para detectar FancyMenu)
+                // HOOK 1: ProcessManager.Update
                 // ============================================================
                 MethodInfo updateMethod = typeof(ProcessManager).GetMethod("Update");
                 if (updateMethod != null)
@@ -88,6 +89,23 @@ namespace DMSxMeadow
                         Plugin.Logger.LogInfo("SetCurrentlySelectedOfSeries hooked");
                     }
                 }
+                
+                // ============================================================
+                // HOOK 5: FancyMenu.ShutDownProcess - PARCHE DE SEGURIDAD
+                // ============================================================
+                MethodInfo shutdownMethod = fancyMenuType.GetMethod("ShutDownProcess");
+                if (shutdownMethod != null)
+                {
+                    MethodInfo hookShutdown = typeof(FancyMenuHookHandler)
+                        .GetMethod("ShutDownProcess_Hook", 
+                            BindingFlags.NonPublic | BindingFlags.Static);
+                    
+                    if (hookShutdown != null)
+                    {
+                        shutdownHook = new Hook(shutdownMethod, hookShutdown);
+                        Plugin.Logger.LogInfo("FancyMenu.ShutDownProcess hooked (security)");
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -132,14 +150,11 @@ namespace DMSxMeadow
             DressMySlugcat.FancyMenu self,
             string series)
         {
-            // Si es la serie de MEADOW, devolver 0 si está activo, -1 si no
             if (series == "MEADOW_SERIES")
             {
                 return MeadowProfileManager.IsMeadowModeActive ? 0 : -1;
             }
             
-            // Si es la serie de PLAYER_ y Meadow está activo, devolver -1
-            // Esto hace que el marco desaparezca de los botones Player 1-4
             if (MeadowProfileManager.IsMeadowModeActive && series.StartsWith("PLAYER_"))
             {
                 return -1;
@@ -157,17 +172,15 @@ namespace DMSxMeadow
             string series,
             int to)
         {
-            // Si es la serie de MEADOW, toggle
             if (series == "MEADOW_SERIES")
             {
                 if (_uiInstances.TryGetValue(self, out var ui))
                 {
                     ui.ToggleMeadowMode();
                 }
-                return; // No llamar a orig, nosotros manejamos el toggle
+                return;
             }
             
-            // Si es un botón PLAYER_ y Meadow está activo, desactivar Meadow primero
             if (series.StartsWith("PLAYER_") && MeadowProfileManager.IsMeadowModeActive)
             {
                 Plugin.Logger.LogInfo($"Player button clicked while Meadow active - deactivating Meadow first");
@@ -177,8 +190,38 @@ namespace DMSxMeadow
                 }
             }
             
-            // Dejar que DMS maneje la selección normal
             orig(self, series, to);
+        }
+        
+        // ============================================================
+        // HOOK DE ShutDownProcess - PARCHE DE SEGURIDAD
+        // ============================================================
+        private static void ShutDownProcess_Hook(
+            Action<DressMySlugcat.FancyMenu> orig,
+            DressMySlugcat.FancyMenu self)
+        {
+            try
+            {
+                // Si Meadow está activo en esta instancia, forzar desactivación
+                if (_uiInstances.TryGetValue(self, out var ui))
+                {
+                    if (MeadowProfileManager.IsMeadowModeActive)
+                    {
+                        Plugin.Logger.LogWarning("Shutting down FancyMenu while Meadow active - forcing deactivation!");
+                        ui.ForceDeactivateMeadowMode();
+                    }
+                    
+                    // Limpiar la instancia del diccionario
+                    _uiInstances.Remove(self);
+                    Plugin.Logger.LogInfo("Removed FancyMenu instance from UI cache");
+                }
+            }
+            catch (Exception ex)
+            {
+                Plugin.Logger.LogError($"Error in ShutDownProcess hook: {ex.Message}");
+            }
+            
+            orig(self);
         }
         
         // ============================================================
@@ -190,7 +233,6 @@ namespace DMSxMeadow
             MenuObject sender,
             string message)
         {
-            // Manejar mensajes de Meadow
             if (message == "MEADOW_TOGGLE" || message == "PROFILE_SET")
             {
                 try
@@ -207,7 +249,6 @@ namespace DMSxMeadow
                 }
             }
             
-            // Auto-guardar cuando se cambian sprites en modo Meadow
             if (MeadowProfileManager.IsMeadowModeActive && 
                 (message.StartsWith("SPRITE_SELECTOR_") || 
                  message.StartsWith("SPRITE_CUSTOMIZER_") || 
@@ -240,6 +281,7 @@ namespace DMSxMeadow
             signalHook?.Dispose();
             getSelectedHook?.Dispose();
             setSelectedHook?.Dispose();
+            shutdownHook?.Dispose();
             _uiInstances.Clear();
             Plugin.Logger.LogInfo("FancyMenu hooks disposed");
         }

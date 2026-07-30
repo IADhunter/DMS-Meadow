@@ -28,11 +28,13 @@ namespace DMSxMeadow
                 Logger.LogInfo("Initializing DMS x Meadow v2.0...");
                 
                 MeadowProfileManager.Load();
+                MeadowProfileManager.LogAllAssignments(); // <-- Diagnóstico
                 InitializeHooks();
                 FancyMenuHookHandler.Initialize();
                 
                 Logger.LogInfo("DMS x Meadow initialized successfully!");
-                Logger.LogInfo($"Save path: {Application.persistentDataPath}/dressmyslugcat/meadowcustom.dat");
+                Logger.LogInfo($"Profiles save path: {Application.persistentDataPath}/dressmyslugcat/meadowcustom.dat");
+                Logger.LogInfo($"Assignments save path: {Application.persistentDataPath}/dmsxmeadow/dmsxmeadow.txt");
             }
             catch (Exception ex)
             {
@@ -45,7 +47,6 @@ namespace DMSxMeadow
         {
             try
             {
-                // Hookear Customization.For(Player, bool)
                 MethodInfo originalFor = typeof(DressMySlugcat.Customization)
                     .GetMethod("For", new Type[] { typeof(Player), typeof(bool) });
                 
@@ -67,9 +68,6 @@ namespace DMSxMeadow
             }
         }
         
-        // ============================================================
-        // HOOK PARA APLICAR SKINS DE MEADOW POR STEAMID
-        // ============================================================
         private static DressMySlugcat.Customization Customization_For_Hook(
             Func<Player, bool, DressMySlugcat.Customization> orig,
             Player player,

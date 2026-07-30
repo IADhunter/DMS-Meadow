@@ -20,9 +20,9 @@ namespace DMSxMeadow
         private MenuTabWrapper _tabWrapper;
         private bool _uiAdded = false;
         
-        // Backup del perfil nativo para restaurar al salir de Meadow
         private DressMySlugcat.Customization _nativeBackup;
         private int _borrowedPlayerIndex = -1;
+        private string _borrowedSlugcat = "";
         
         public MeadowProfileUI(DressMySlugcat.FancyMenu fancyMenu)
         {
@@ -37,9 +37,6 @@ namespace DMSxMeadow
             {
                 Plugin.Logger.LogInfo("MeadowProfileUI.Initialize() started");
                 
-                // ============================================================
-                // 1. Buscar textBoxBorder
-                // ============================================================
                 var textBoxBorderField = _fancyMenu.GetType()
                     .GetField("textBoxBorder", 
                         System.Reflection.BindingFlags.Public | 
@@ -60,9 +57,6 @@ namespace DMSxMeadow
                 
                 Plugin.Logger.LogInfo($"textBoxBorder found: pos=({textBoxBorder.pos.x}, {textBoxBorder.pos.y}), size=({textBoxBorder.size.x}, {textBoxBorder.size.y})");
                 
-                // ============================================================
-                // 2. Obtener cantidad de jugadores
-                // ============================================================
                 var playerButtonsField = _fancyMenu.GetType()
                     .GetField("playerButtons", 
                         System.Reflection.BindingFlags.Public | 
@@ -80,13 +74,16 @@ namespace DMSxMeadow
                 
                 Plugin.Logger.LogInfo($"playerCount: {playerCount}");
                 
-                // ============================================================
-                // 3. Calcular posición visible
-                // ============================================================
                 float leftAnchor = (1366f - _fancyMenu.manager.rainWorld.options.ScreenSize.x) / 2f;
                 
-                float startX = textBoxBorder.pos.x + (65f * playerCount) + 10f - leftAnchor;
-                float yPos = textBoxBorder.pos.y - 40f;
+                float offsetX = -50f;
+                float offsetY = 15f;
+                
+                float baseStartX = textBoxBorder.pos.x + (65f * playerCount) + 10f - leftAnchor;
+                float baseYPos = textBoxBorder.pos.y - 40f;
+                
+                float startX = baseStartX + offsetX;
+                float yPos = baseYPos + offsetY;
                 
                 if (startX < 0 || startX > 1366f)
                 {
@@ -95,36 +92,27 @@ namespace DMSxMeadow
                     yPos = 100f;
                 }
                 
-                Plugin.Logger.LogInfo($"Button position: X={startX}, Y={yPos}");
+                Plugin.Logger.LogInfo($"Button position: X={startX}, Y={yPos} (offset X:{offsetX}, Y:{offsetY})");
                 
-                // ============================================================
-                // 4. Crear MenuTabWrapper
-                // ============================================================
                 _tabWrapper = new MenuTabWrapper(_fancyMenu, _fancyMenu.pages[0]);
                 _fancyMenu.pages[0].subObjects.Add(_tabWrapper);
                 Plugin.Logger.LogInfo("MenuTabWrapper created and added to page");
                 
-                // ============================================================
-                // 5. Crear botón MEADOW como SelectOneButton
-                // ============================================================
                 var meadowArray = new SelectOneButton[1];
                 _meadowModeButton = new SelectOneButton(
                     _fancyMenu,
                     _fancyMenu.pages[0],
                     "MEADOW",
                     "MEADOW_SERIES",
-                    new Vector2(startX, yPos),
+                    new Vector2(baseStartX, baseYPos),
                     new Vector2(80f, 30f),
                     meadowArray,
                     0
                 );
                 meadowArray[0] = _meadowModeButton;
                 _fancyMenu.pages[0].subObjects.Add(_meadowModeButton);
-                Plugin.Logger.LogInfo($"MEADOW SelectOneButton added at ({startX}, {yPos})");
+                Plugin.Logger.LogInfo($"MEADOW SelectOneButton added at ({baseStartX}, {baseYPos})");
                 
-                // ============================================================
-                // 6. Crear controles: Profile (campo + botón SET)
-                // ============================================================
                 float yOffset = 0f;
                 
                 _profileLabel = new MenuLabel(
@@ -165,9 +153,6 @@ namespace DMSxMeadow
                 _fancyMenu.pages[0].subObjects.Add(_profileSetButton);
                 _profileSetButton.inactive = true;
                 
-                // ============================================================
-                // 7. Steam ID
-                // ============================================================
                 yOffset = 35f;
                 
                 _steamLabel = new MenuLabel(
@@ -196,9 +181,6 @@ namespace DMSxMeadow
                 new UIelementWrapper(_tabWrapper, _steamIdField);
                 Plugin.Logger.LogInfo($"Steam ID field added at ({startX + 65f}, {yPos + 35f + yOffset})");
                 
-                // ============================================================
-                // 8. Status Label
-                // ============================================================
                 yOffset = 70f;
                 
                 _statusLabel = new MenuLabel(
@@ -214,7 +196,6 @@ namespace DMSxMeadow
                 _uiAdded = true;
                 Plugin.Logger.LogInfo("Meadow profile UI initialized SUCCESSFULLY!");
                 
-                // Eventos
                 _steamIdField.OnValueChanged += OnSteamIdChanged;
                 _profileNumberField.OnValueChanged += OnProfileNumberChanged;
             }
@@ -226,7 +207,7 @@ namespace DMSxMeadow
         }
         
         // ============================================================
-        // Eventos
+        // OnSteamIdChanged - CORREGIDO para evitar guardados innecesarios
         // ============================================================
         private void OnSteamIdChanged(UIconfig sender, string oldValue, string newValue)
         {
@@ -236,7 +217,17 @@ namespace DMSxMeadow
                 
                 if (!MeadowProfileManager.IsMeadowModeActive) return;
                 
+                // Si el valor es "unassigned", lo tratamos como vacío
                 string cleanValue = (newValue == "unassigned") ? "" : newValue;
+                string oldClean = (oldValue == "unassigned") ? "" : oldValue;
+                
+                // Si el valor no cambió realmente, no hacer nada
+                if (cleanValue == oldClean)
+                {
+                    Plugin.Logger.LogInfo("Steam ID value unchanged, skipping save");
+                    return;
+                }
+                
                 int profileNumber = MeadowProfileManager.CurrentProfileNumber;
                 MeadowProfileManager.SetSteamID(profileNumber, cleanValue);
                 _statusLabel.text = $"Steam ID saved";
@@ -267,7 +258,7 @@ namespace DMSxMeadow
         }
         
         // ============================================================
-        // SET Profile
+        // SetProfileNumber - CON EL FIX
         // ============================================================
         private void SetProfileNumber()
         {
@@ -293,6 +284,16 @@ namespace DMSxMeadow
                 return;
             }
             
+            // ============================================================
+            // FIX: Si ya estamos en este perfil, NO hacer nada
+            // ============================================================
+            if (profileNumber == MeadowProfileManager.CurrentProfileNumber)
+            {
+                _statusLabel.text = $"Already on profile {profileNumber}";
+                Plugin.Logger.LogInfo($"SetProfileNumber: already on profile {profileNumber}, skipping reload");
+                return;
+            }
+            
             SaveCurrentProfile();
             
             MeadowProfileManager.SetCurrentProfile(profileNumber);
@@ -307,9 +308,6 @@ namespace DMSxMeadow
             Plugin.Logger.LogInfo($"Switched to meadow profile {profileNumber}");
         }
         
-        // ============================================================
-        // Guardar/Cargar perfiles
-        // ============================================================
         private void SaveCurrentProfile()
         {
             try
@@ -318,12 +316,18 @@ namespace DMSxMeadow
                 
                 var customization = DressMySlugcat.Customization.For(
                     _fancyMenu.selectedSlugcat, 
-                    _fancyMenu.selectedPlayerIndex
+                    _fancyMenu.selectedPlayerIndex,
+                    false
                 );
                 
                 if (customization != null)
                 {
                     MeadowProfileManager.SaveCurrentProfile(customization);
+                    Plugin.Logger.LogInfo($"Saved current meadow profile {MeadowProfileManager.CurrentProfileNumber}");
+                }
+                else
+                {
+                    Plugin.Logger.LogWarning("SaveCurrentProfile: customization is null!");
                 }
             }
             catch (Exception ex)
@@ -341,11 +345,14 @@ namespace DMSxMeadow
                 {
                     var currentCust = DressMySlugcat.Customization.For(
                         _fancyMenu.selectedSlugcat, 
-                        _fancyMenu.selectedPlayerIndex
+                        _fancyMenu.selectedPlayerIndex,
+                        false
                     );
                     
                     if (currentCust != null)
                     {
+                        Plugin.Logger.LogInfo($"Loading meadow profile {displayNumber} into native player {_fancyMenu.selectedPlayerIndex}");
+                        
                         currentCust.CustomTail.Length = customization.CustomTail.Length;
                         currentCust.CustomTail.Wideness = customization.CustomTail.Wideness;
                         currentCust.CustomTail.Roundness = customization.CustomTail.Roundness;
@@ -366,8 +373,18 @@ namespace DMSxMeadow
                             });
                         }
                         
+                        Plugin.Logger.LogInfo($"Loaded meadow profile {displayNumber}: Tail.Length={currentCust.CustomTail.Length}, Sprites={currentCust.CustomSprites.Count}");
+                        
                         RefreshDummyAndControls();
                     }
+                    else
+                    {
+                        Plugin.Logger.LogWarning("LoadProfile: currentCust is null!");
+                    }
+                }
+                else
+                {
+                    Plugin.Logger.LogWarning($"LoadProfile: meadow profile {displayNumber} is null!");
                 }
             }
             catch (Exception ex)
@@ -376,9 +393,6 @@ namespace DMSxMeadow
             }
         }
         
-        // ============================================================
-        // Refrescar dummy y controles
-        // ============================================================
         private void RefreshDummyAndControls()
         {
             try
@@ -392,9 +406,22 @@ namespace DMSxMeadow
                 if (dummy != null)
                 {
                     var updateMethod = dummy.GetType().GetMethod("UpdateSprites", 
-                        System.Reflection.BindingFlags.Public | 
+                        System.Reflection.BindingFlags.NonPublic | 
                         System.Reflection.BindingFlags.Instance);
-                    updateMethod?.Invoke(dummy, null);
+                    
+                    if (updateMethod != null)
+                    {
+                        Plugin.Logger.LogInfo("Calling UpdateSprites via reflection (NonPublic)");
+                        updateMethod.Invoke(dummy, null);
+                    }
+                    else
+                    {
+                        Plugin.Logger.LogWarning("UpdateSprites method not found!");
+                    }
+                }
+                else
+                {
+                    Plugin.Logger.LogWarning("RefreshDummyAndControls: dummy is null!");
                 }
                 
                 var updateControlsMethod = _fancyMenu.GetType()
@@ -409,20 +436,34 @@ namespace DMSxMeadow
             }
         }
         
-        // ============================================================
-        // Activar/Desactivar Meadow Mode
-        // ============================================================
         public void ActivateMeadowMode()
         {
-            if (MeadowProfileManager.IsMeadowModeActive) return;
+            if (MeadowProfileManager.IsMeadowModeActive)
+            {
+                Plugin.Logger.LogWarning("ActivateMeadowMode called but already active!");
+                return;
+            }
             
             Plugin.Logger.LogInfo("Activating Meadow mode");
             
-            MeadowProfileManager.IsMeadowModeActive = true;
-            
-            // Backup del perfil nativo que estamos "pidiendo prestado"
             _borrowedPlayerIndex = _fancyMenu.selectedPlayerIndex;
-            _nativeBackup = DressMySlugcat.Customization.For(_fancyMenu.selectedSlugcat, _borrowedPlayerIndex).Copy();
+            _borrowedSlugcat = _fancyMenu.selectedSlugcat;
+            
+            _nativeBackup = DressMySlugcat.Customization.For(
+                _fancyMenu.selectedSlugcat, 
+                _borrowedPlayerIndex,
+                false
+            )?.Copy();
+            
+            if (_nativeBackup == null)
+            {
+                Plugin.Logger.LogError($"Failed to backup native profile {_borrowedPlayerIndex}!");
+                return;
+            }
+            
+            Plugin.Logger.LogInfo($"Backup created for player {_borrowedPlayerIndex}: Tail.Length={_nativeBackup.CustomTail.Length}, Sprites={_nativeBackup.CustomSprites.Count}");
+            
+            MeadowProfileManager.IsMeadowModeActive = true;
             
             _profileSetButton.inactive = false;
             
@@ -442,40 +483,79 @@ namespace DMSxMeadow
         
         public void DeactivateMeadowMode()
         {
-            if (!MeadowProfileManager.IsMeadowModeActive) return;
+            if (!MeadowProfileManager.IsMeadowModeActive)
+            {
+                Plugin.Logger.LogWarning("DeactivateMeadowMode called but not active!");
+                return;
+            }
             
             Plugin.Logger.LogInfo("Deactivating Meadow mode");
             
-            // Guardar los cambios en meadowcustom.dat
             SaveCurrentProfile();
             
-            // Restaurar el perfil nativo a como estaba antes de tocarlo
             if (_nativeBackup != null && _borrowedPlayerIndex >= 0)
             {
-                var native = DressMySlugcat.Customization.For(_fancyMenu.selectedSlugcat, _borrowedPlayerIndex);
-                native.CustomTail.Length = _nativeBackup.CustomTail.Length;
-                native.CustomTail.Wideness = _nativeBackup.CustomTail.Wideness;
-                native.CustomTail.Roundness = _nativeBackup.CustomTail.Roundness;
-                native.CustomTail.Lift = _nativeBackup.CustomTail.Lift;
-                native.CustomTail.Color = _nativeBackup.CustomTail.Color;
-                native.CustomTail.CustTailShape = _nativeBackup.CustomTail.CustTailShape;
-                native.CustomTail.AsymTail = _nativeBackup.CustomTail.AsymTail;
-                native.CustomSprites.Clear();
-                foreach (var s in _nativeBackup.CustomSprites)
+                var native = DressMySlugcat.Customization.For(
+                    _borrowedSlugcat, 
+                    _borrowedPlayerIndex,
+                    false
+                );
+                
+                if (native != null)
                 {
-                    native.CustomSprites.Add(new DressMySlugcat.CustomSprite
+                    Plugin.Logger.LogInfo($"Before restore - Native player {_borrowedPlayerIndex}: Tail.Length={native.CustomTail.Length}, Sprites={native.CustomSprites.Count}");
+                    
+                    native.CustomTail.Length = _nativeBackup.CustomTail.Length;
+                    native.CustomTail.Wideness = _nativeBackup.CustomTail.Wideness;
+                    native.CustomTail.Roundness = _nativeBackup.CustomTail.Roundness;
+                    native.CustomTail.Lift = _nativeBackup.CustomTail.Lift;
+                    native.CustomTail.Color = _nativeBackup.CustomTail.Color;
+                    native.CustomTail.CustTailShape = _nativeBackup.CustomTail.CustTailShape;
+                    native.CustomTail.AsymTail = _nativeBackup.CustomTail.AsymTail;
+                    
+                    native.CustomSprites.Clear();
+                    foreach (var s in _nativeBackup.CustomSprites)
                     {
-                        Sprite = s.Sprite,
-                        SpriteSheetID = s.SpriteSheetID,
-                        ColorHex = s.ColorHex,
-                        Enforce = s.Enforce
-                    });
+                        native.CustomSprites.Add(new DressMySlugcat.CustomSprite
+                        {
+                            Sprite = s.Sprite,
+                            SpriteSheetID = s.SpriteSheetID,
+                            ColorHex = s.ColorHex,
+                            Enforce = s.Enforce
+                        });
+                    }
+                    
+                    Plugin.Logger.LogInfo($"After restore - Native player {_borrowedPlayerIndex}: Tail.Length={native.CustomTail.Length}, Sprites={native.CustomSprites.Count}");
+                    
+                    bool match = true;
+                    match &= native.CustomTail.Length == _nativeBackup.CustomTail.Length;
+                    match &= native.CustomTail.Wideness == _nativeBackup.CustomTail.Wideness;
+                    match &= native.CustomTail.Roundness == _nativeBackup.CustomTail.Roundness;
+                    match &= native.CustomTail.Color == _nativeBackup.CustomTail.Color;
+                    match &= native.CustomSprites.Count == _nativeBackup.CustomSprites.Count;
+                    
+                    if (match)
+                    {
+                        Plugin.Logger.LogInfo($"✅ Native profile {_borrowedPlayerIndex} successfully restored!");
+                    }
+                    else
+                    {
+                        Plugin.Logger.LogWarning($"⚠️ Native profile {_borrowedPlayerIndex} restore may have issues - check logs!");
+                    }
                 }
-                Plugin.Logger.LogInfo($"Restored native profile {_borrowedPlayerIndex} from backup");
+                else
+                {
+                    Plugin.Logger.LogError($"Failed to get native profile {_borrowedPlayerIndex} for restoration!");
+                }
+            }
+            else
+            {
+                Plugin.Logger.LogWarning($"No backup to restore! _nativeBackup={_nativeBackup != null}, _borrowedPlayerIndex={_borrowedPlayerIndex}");
             }
             
             _nativeBackup = null;
             _borrowedPlayerIndex = -1;
+            _borrowedSlugcat = "";
             
             MeadowProfileManager.IsMeadowModeActive = false;
             _profileSetButton.inactive = true;
@@ -483,7 +563,7 @@ namespace DMSxMeadow
             
             RefreshDummyAndControls();
             
-            Plugin.Logger.LogInfo("Meadow mode deactivated");
+            Plugin.Logger.LogInfo("Meadow mode deactivated and native profile restored");
         }
         
         public void ToggleMeadowMode()
@@ -500,9 +580,6 @@ namespace DMSxMeadow
             _fancyMenu.PlaySound(SoundID.MENU_Switch_Page_Out);
         }
         
-        // ============================================================
-        // HandleSignal para FancyMenu.Singal
-        // ============================================================
         public void HandleSignal(string message)
         {
             Plugin.Logger.LogInfo($"HandleSignal: {message}");
@@ -517,15 +594,67 @@ namespace DMSxMeadow
             }
         }
         
-        // ============================================================
-        // AutoSave
-        // ============================================================
         public void AutoSave()
         {
             if (MeadowProfileManager.IsMeadowModeActive)
             {
                 SaveCurrentProfile();
             }
+        }
+        
+        public void ForceDeactivateMeadowMode()
+        {
+            if (!MeadowProfileManager.IsMeadowModeActive) return;
+            
+            Plugin.Logger.LogWarning("ForceDeactivateMeadowMode called - ensuring cleanup!");
+            
+            SaveCurrentProfile();
+            
+            if (_nativeBackup != null && _borrowedPlayerIndex >= 0)
+            {
+                var native = DressMySlugcat.Customization.For(
+                    _borrowedSlugcat, 
+                    _borrowedPlayerIndex,
+                    false
+                );
+                
+                if (native != null)
+                {
+                    Plugin.Logger.LogInfo($"Force restore - Native player {_borrowedPlayerIndex}");
+                    
+                    native.CustomTail.Length = _nativeBackup.CustomTail.Length;
+                    native.CustomTail.Wideness = _nativeBackup.CustomTail.Wideness;
+                    native.CustomTail.Roundness = _nativeBackup.CustomTail.Roundness;
+                    native.CustomTail.Lift = _nativeBackup.CustomTail.Lift;
+                    native.CustomTail.Color = _nativeBackup.CustomTail.Color;
+                    native.CustomTail.CustTailShape = _nativeBackup.CustomTail.CustTailShape;
+                    native.CustomTail.AsymTail = _nativeBackup.CustomTail.AsymTail;
+                    
+                    native.CustomSprites.Clear();
+                    foreach (var s in _nativeBackup.CustomSprites)
+                    {
+                        native.CustomSprites.Add(new DressMySlugcat.CustomSprite
+                        {
+                            Sprite = s.Sprite,
+                            SpriteSheetID = s.SpriteSheetID,
+                            ColorHex = s.ColorHex,
+                            Enforce = s.Enforce
+                        });
+                    }
+                }
+            }
+            
+            _nativeBackup = null;
+            _borrowedPlayerIndex = -1;
+            _borrowedSlugcat = "";
+            
+            MeadowProfileManager.IsMeadowModeActive = false;
+            _profileSetButton.inactive = true;
+            _statusLabel.text = "";
+            
+            RefreshDummyAndControls();
+            
+            Plugin.Logger.LogInfo("ForceDeactivateMeadowMode completed");
         }
     }
 }
