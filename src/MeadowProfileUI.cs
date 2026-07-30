@@ -24,9 +24,6 @@ namespace DMSxMeadow
         private int _borrowedPlayerIndex = -1;
         private string _borrowedSlugcat = "";
         
-        // ============================================================
-        // SEGUIMIENTO DE FOCO Y PENDING INPUT
-        // ============================================================
         private bool _profileFieldWasHeld = false;
         private bool _steamFieldWasHeld = false;
         private string _lastConfirmedSteamId = "";
@@ -148,9 +145,6 @@ namespace DMSxMeadow
                 );
                 _profileNumberField.allowSpace = false;
                 _profileNumberField.maxLength = 3;
-                // ============================================================
-                // ESTADO INICIAL: BLOQUEADO (greyedOut = true)
-                // ============================================================
                 _profileNumberField.greyedOut = true;
                 new UIelementWrapper(_tabWrapper, _profileNumberField);
                 Plugin.Logger.LogInfo($"Profile number field added at ({startX + 65f}, {yPos + 35f + yOffset})");
@@ -191,9 +185,6 @@ namespace DMSxMeadow
                 );
                 _steamIdField.allowSpace = false;
                 _steamIdField.maxLength = 20;
-                // ============================================================
-                // ESTADO INICIAL: BLOQUEADO (greyedOut = true)
-                // ============================================================
                 _steamIdField.greyedOut = true;
                 new UIelementWrapper(_tabWrapper, _steamIdField);
                 Plugin.Logger.LogInfo($"Steam ID field added at ({startX + 65f}, {yPos + 35f + yOffset})");
@@ -432,6 +423,7 @@ namespace DMSxMeadow
         {
             try
             {
+                // --- Profile Number ---
                 bool profileHeld = GetHeld(_profileNumberField);
                 if (_profileFieldWasHeld && !profileHeld)
                 {
@@ -445,13 +437,12 @@ namespace DMSxMeadow
                 }
                 _profileFieldWasHeld = profileHeld;
                 
+                // --- Steam ID ---
                 bool steamHeld = GetHeld(_steamIdField);
                 if (_steamFieldWasHeld && !steamHeld)
                 {
                     string currentSteamId = MeadowProfileManager.GetSteamID(MeadowProfileManager.CurrentProfileNumber);
-                    string displayValue = string.IsNullOrEmpty(currentSteamId) ? "unassigned" : currentSteamId;
                     string fieldValue = _steamIdField.value;
-                    
                     string cleanValue = (fieldValue == "unassigned") ? "" : fieldValue;
                     
                     if (cleanValue != currentSteamId)
@@ -459,18 +450,12 @@ namespace DMSxMeadow
                         Plugin.Logger.LogInfo($"Steam field lost focus, saving new value: '{cleanValue}'");
                         MeadowProfileManager.SetSteamID(MeadowProfileManager.CurrentProfileNumber, cleanValue);
                         _lastConfirmedSteamId = cleanValue;
-                        _statusLabel.text = $"Steam ID saved";
-                    }
-                    else if (fieldValue != displayValue)
-                    {
-                        Plugin.Logger.LogInfo($"Steam field lost focus, value unchanged, restoring display");
-                        _steamIdField.value = displayValue;
+                        _statusLabel.text = "Steam ID saved";
                     }
                     
-                    if (_steamIdField.value != displayValue)
-                    {
-                        _steamIdField.value = displayValue;
-                    }
+                    // Recalcular DESPUÉS de guardar, usando el valor recién confirmado
+                    string displayValue = string.IsNullOrEmpty(cleanValue) ? "unassigned" : cleanValue;
+                    _steamIdField.value = displayValue;
                 }
                 _steamFieldWasHeld = steamHeld;
             }
@@ -532,9 +517,6 @@ namespace DMSxMeadow
             
             MeadowProfileManager.IsMeadowModeActive = true;
             
-            // ============================================================
-            // DESBLOQUEAR TEXTBOXES AL ACTIVAR MEADOW (greyedOut = false)
-            // ============================================================
             _profileNumberField.greyedOut = false;
             _steamIdField.greyedOut = false;
             _profileSetButton.inactive = false;
@@ -633,9 +615,6 @@ namespace DMSxMeadow
             _borrowedPlayerIndex = -1;
             _borrowedSlugcat = "";
             
-            // ============================================================
-            // BLOQUEAR TEXTBOXES AL DESACTIVAR MEADOW (greyedOut = true)
-            // ============================================================
             _profileNumberField.greyedOut = true;
             _steamIdField.greyedOut = true;
             _profileSetButton.inactive = true;
@@ -735,9 +714,6 @@ namespace DMSxMeadow
             _borrowedPlayerIndex = -1;
             _borrowedSlugcat = "";
             
-            // ============================================================
-            // BLOQUEAR TEXTBOXES EN FORCEDEACTIVATE (greyedOut = true)
-            // ============================================================
             _profileNumberField.greyedOut = true;
             _steamIdField.greyedOut = true;
             _profileSetButton.inactive = true;
