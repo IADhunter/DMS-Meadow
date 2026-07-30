@@ -1,5 +1,0 @@
-# Skin configuration for Dress My Slugcat + Rain Meadow
-# Format -> STEAM_NAME:DMS_PROFILE_NUMBER
-# Example:
-SteamUserName:2
-omegaboom123:3

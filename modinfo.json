@@ -1,9 +1,9 @@
 {
-  "id": "dmsmeadowcompat",
-  "name": "Dress My Slugcat Meadow Compat",
+  "id": "dmsxmeadow",
+  "name": "DMSxMeadow",
   "version": "1.0.0",
   "hide_version": false,
-  "authors": "_1isf",
+  "authors": "_1isf, IADhunter",
   "description": "Makes it so that you can choose what other meadow players look like in your client using the player slots in the Get Fancy screen! Just navigate to the mod's directory and set which slot is your friend going to use in the dms_meadow_skins.txt file. Also make sure Default skin for Rain Meadow players is disabled in Dress My Slugcat.",
   "requirements": [
     "dressmyslugcat",
