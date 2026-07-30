@@ -129,7 +129,6 @@ namespace DMSxMeadow
                     foreach (var line in lines)
                     {
                         var trimmed = line.Trim();
-                        // Saltar líneas vacías y comentarios
                         if (string.IsNullOrEmpty(trimmed) || trimmed.StartsWith("#")) continue;
                         
                         var parts = trimmed.Split(':');
@@ -258,47 +257,27 @@ namespace DMSxMeadow
         }
         
         // ============================================================
-        // OPERACIONES CON ASIGNACIONES SteamID
+        // OPERACIONES CON ASIGNACIONES SteamID - FIX APLICADO
         // ============================================================
         public static void SetSteamID(int displayNumber, string steamID)
         {
             LoadAssignments();
             
-            // Si SteamID está vacío, eliminar la asignación
-            if (string.IsNullOrEmpty(steamID))
+            // PRIMERO: borrar cualquier entrada vieja de este perfil
+            var oldKeys = new List<string>();
+            foreach (var kvp in _assignments)
+                if (kvp.Value == displayNumber) oldKeys.Add(kvp.Key);
+            foreach (var k in oldKeys) _assignments.Remove(k);
+            
+            // Después, si el nuevo SteamID no está vacío, asignarlo
+            if (!string.IsNullOrEmpty(steamID))
             {
-                // Buscar y eliminar cualquier asignación existente para este perfil
-                string keyToRemove = null;
-                foreach (var kvp in _assignments)
-                {
-                    if (kvp.Value == displayNumber)
-                    {
-                        keyToRemove = kvp.Key;
-                        break;
-                    }
-                }
-                if (keyToRemove != null)
-                {
-                    _assignments.Remove(keyToRemove);
-                    Plugin.Logger.LogInfo($"Removed assignment for profile {displayNumber}");
-                }
-                SaveAssignments();
-                return;
+                // Si el SteamID ya existe en otra entrada, la sobreescribimos (reasignación)
+                _assignments[steamID] = displayNumber;
             }
             
-            // Si el SteamID ya existe en otra asignación, eliminarlo primero
-            if (_assignments.ContainsKey(steamID))
-            {
-                var existingProfile = _assignments[steamID];
-                if (existingProfile != displayNumber)
-                {
-                    Plugin.Logger.LogWarning($"SteamID '{steamID}' was assigned to profile {existingProfile}, reassigning to {displayNumber}");
-                }
-            }
-            
-            _assignments[steamID] = displayNumber;
             SaveAssignments();
-            Plugin.Logger.LogInfo($"Assigned SteamID '{steamID}' -> profile {displayNumber}");
+            Plugin.Logger.LogInfo($"SteamID assignment updated: profile {displayNumber} -> '{steamID}'");
         }
         
         public static string GetSteamID(int displayNumber)

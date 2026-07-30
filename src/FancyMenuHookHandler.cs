@@ -114,7 +114,7 @@ namespace DMSxMeadow
         }
         
         // ============================================================
-        // HOOK DE Update
+        // HOOK DE Update - CON LLAMADA A CheckFieldFocusLoss
         // ============================================================
         private static void Update_Hook(
             Action<ProcessManager, float> orig,
@@ -133,6 +133,16 @@ namespace DMSxMeadow
                         var ui = new MeadowProfileUI(fancyMenu);
                         ui.Initialize();
                         _uiInstances[fancyMenu] = ui;
+                    }
+                    else
+                    {
+                        // ============================================================
+                        // LLAMAR CADA FRAME PARA DETECTAR PÉRDIDA DE FOCO
+                        // ============================================================
+                        if (_uiInstances.TryGetValue(fancyMenu, out var ui))
+                        {
+                            ui.CheckFieldFocusLoss();
+                        }
                     }
                 }
             }
@@ -202,7 +212,6 @@ namespace DMSxMeadow
         {
             try
             {
-                // Si Meadow está activo en esta instancia, forzar desactivación
                 if (_uiInstances.TryGetValue(self, out var ui))
                 {
                     if (MeadowProfileManager.IsMeadowModeActive)
@@ -211,7 +220,6 @@ namespace DMSxMeadow
                         ui.ForceDeactivateMeadowMode();
                     }
                     
-                    // Limpiar la instancia del diccionario
                     _uiInstances.Remove(self);
                     Plugin.Logger.LogInfo("Removed FancyMenu instance from UI cache");
                 }

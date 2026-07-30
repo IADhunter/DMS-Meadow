@@ -24,6 +24,14 @@ namespace DMSxMeadow
         private int _borrowedPlayerIndex = -1;
         private string _borrowedSlugcat = "";
         
+        // ============================================================
+        // NUEVOS CAMPOS PARA SEGUIMIENTO DE FOCO
+        // ============================================================
+        private bool _profileFieldWasHeld = false;
+        private bool _steamFieldWasHeld = false;
+        private string _lastConfirmedSteamId = "";
+        private string _lastConfirmedProfileNumber = "";
+        
         public MeadowProfileUI(DressMySlugcat.FancyMenu fancyMenu)
         {
             _fancyMenu = fancyMenu;
@@ -196,7 +204,10 @@ namespace DMSxMeadow
                 _uiAdded = true;
                 Plugin.Logger.LogInfo("Meadow profile UI initialized SUCCESSFULLY!");
                 
-                _steamIdField.OnValueChanged += OnSteamIdChanged;
+                // ============================================================
+                // OnValueChanged: SOLO DEBUG, NO GUARDADO
+                // ============================================================
+                _steamIdField.OnValueChanged += OnSteamIdChangedDebug;
                 _profileNumberField.OnValueChanged += OnProfileNumberChanged;
             }
             catch (Exception ex)
@@ -207,35 +218,12 @@ namespace DMSxMeadow
         }
         
         // ============================================================
-        // OnSteamIdChanged - CORREGIDO para evitar guardados innecesarios
+        // OnSteamIdChangedDebug - SOLO LOG, SIN GUARDADO
         // ============================================================
-        private void OnSteamIdChanged(UIconfig sender, string oldValue, string newValue)
+        private void OnSteamIdChangedDebug(UIconfig sender, string oldValue, string newValue)
         {
-            try
-            {
-                Plugin.Logger.LogInfo($"OnSteamIdChanged called: old='{oldValue}', new='{newValue}'");
-                
-                if (!MeadowProfileManager.IsMeadowModeActive) return;
-                
-                // Si el valor es "unassigned", lo tratamos como vacío
-                string cleanValue = (newValue == "unassigned") ? "" : newValue;
-                string oldClean = (oldValue == "unassigned") ? "" : oldValue;
-                
-                // Si el valor no cambió realmente, no hacer nada
-                if (cleanValue == oldClean)
-                {
-                    Plugin.Logger.LogInfo("Steam ID value unchanged, skipping save");
-                    return;
-                }
-                
-                int profileNumber = MeadowProfileManager.CurrentProfileNumber;
-                MeadowProfileManager.SetSteamID(profileNumber, cleanValue);
-                _statusLabel.text = $"Steam ID saved";
-            }
-            catch (Exception ex)
-            {
-                Plugin.Logger.LogError($"Error saving Steam ID: {ex.Message}");
-            }
+            Plugin.Logger.LogInfo($"Steam ID field changed (debug): '{oldValue}' -> '{newValue}'");
+            // NO guardamos aquí
         }
         
         private void OnProfileNumberChanged(UIconfig sender, string oldValue, string newValue)
@@ -284,9 +272,7 @@ namespace DMSxMeadow
                 return;
             }
             
-            // ============================================================
-            // FIX: Si ya estamos en este perfil, NO hacer nada
-            // ============================================================
+            // Si ya estamos en este perfil, NO hacer nada
             if (profileNumber == MeadowProfileManager.CurrentProfileNumber)
             {
                 _statusLabel.text = $"Already on profile {profileNumber}";
@@ -303,6 +289,10 @@ namespace DMSxMeadow
             
             string steamId = MeadowProfileManager.GetSteamID(profileNumber);
             _steamIdField.value = string.IsNullOrEmpty(steamId) ? "unassigned" : steamId;
+            
+            // Guardar valores confirmados
+            _lastConfirmedSteamId = steamId;
+            _lastConfirmedProfileNumber = profileNumber.ToString();
             
             _statusLabel.text = $"Loaded profile {profileNumber}";
             Plugin.Logger.LogInfo($"Switched to meadow profile {profileNumber}");
@@ -436,6 +426,91 @@ namespace DMSxMeadow
             }
         }
         
+        // ============================================================
+        // NUEVO: CheckFieldFocusLoss - DETECCIÓN DE PÉRDIDA DE FOCO
+        // ============================================================
+        public void CheckFieldFocusLoss()
+        {
+            try
+            {
+                // --- Profile Number ---
+                bool profileHeld = GetHeld(_profileNumberField);
+                if (_profileFieldWasHeld && !profileHeld)
+                {
+                    // Perdió el foco sin SET: descartar cambios
+                    string currentProfile = MeadowProfileManager.CurrentProfileNumber.ToString();
+                    if (_profileNumberField.value != currentProfile)
+                    {
+                        Plugin.Logger.LogInfo($"Profile field lost focus, restoring to {currentProfile}");
+                        _profileNumberField.value = currentProfile;
+                        _statusLabel.text = "Profile change cancelled";
+                    }
+                }
+                _profileFieldWasHeld = profileHeld;
+                
+                // --- Steam ID ---
+                bool steamHeld = GetHeld(_steamIdField);
+                if (_steamFieldWasHeld && !steamHeld)
+                {
+                    // Perdió el foco: guardar si cambió, y actualizar UI
+                    string currentSteamId = MeadowProfileManager.GetSteamID(MeadowProfileManager.CurrentProfileNumber);
+                    string displayValue = string.IsNullOrEmpty(currentSteamId) ? "unassigned" : currentSteamId;
+                    string fieldValue = _steamIdField.value;
+                    
+                    // Si el campo tiene "unassigned", lo tratamos como vacío para guardar
+                    string cleanValue = (fieldValue == "unassigned") ? "" : fieldValue;
+                    
+                    if (cleanValue != currentSteamId)
+                    {
+                        Plugin.Logger.LogInfo($"Steam field lost focus, saving new value: '{cleanValue}'");
+                        MeadowProfileManager.SetSteamID(MeadowProfileManager.CurrentProfileNumber, cleanValue);
+                        _lastConfirmedSteamId = cleanValue;
+                        _statusLabel.text = $"Steam ID saved";
+                    }
+                    else if (fieldValue != displayValue)
+                    {
+                        // El usuario escribió pero el valor es el mismo (ej: "unassigned" vs "")
+                        Plugin.Logger.LogInfo($"Steam field lost focus, value unchanged, restoring display");
+                        _steamIdField.value = displayValue;
+                    }
+                    
+                    // Asegurar que el campo muestre el valor correcto
+                    if (_steamIdField.value != displayValue)
+                    {
+                        _steamIdField.value = displayValue;
+                    }
+                }
+                _steamFieldWasHeld = steamHeld;
+            }
+            catch (Exception ex)
+            {
+                Plugin.Logger.LogError($"Error in CheckFieldFocusLoss: {ex.Message}");
+            }
+        }
+        
+        private bool GetHeld(OpTextBox field)
+        {
+            if (field == null) return false;
+            
+            try
+            {
+                var heldProp = typeof(UIfocusable).GetProperty("held", 
+                    System.Reflection.BindingFlags.NonPublic | 
+                    System.Reflection.BindingFlags.Instance);
+                
+                if (heldProp != null)
+                {
+                    return (bool)(heldProp.GetValue(field) ?? false);
+                }
+            }
+            catch (Exception ex)
+            {
+                Plugin.Logger.LogError($"Error getting Held property: {ex.Message}");
+            }
+            
+            return false;
+        }
+        
         public void ActivateMeadowMode()
         {
             if (MeadowProfileManager.IsMeadowModeActive)
@@ -472,6 +547,10 @@ namespace DMSxMeadow
             
             string steamId = MeadowProfileManager.GetSteamID(profileNumber);
             _steamIdField.value = string.IsNullOrEmpty(steamId) ? "unassigned" : steamId;
+            
+            // Guardar valores confirmados
+            _lastConfirmedSteamId = steamId;
+            _lastConfirmedProfileNumber = profileNumber.ToString();
             
             LoadProfile(profileNumber);
             _statusLabel.text = $"Meadow ON - Profile {profileNumber}";
@@ -556,6 +635,12 @@ namespace DMSxMeadow
             _nativeBackup = null;
             _borrowedPlayerIndex = -1;
             _borrowedSlugcat = "";
+            
+            // Resetear flags de foco
+            _lastConfirmedSteamId = "";
+            _lastConfirmedProfileNumber = "";
+            _profileFieldWasHeld = false;
+            _steamFieldWasHeld = false;
             
             MeadowProfileManager.IsMeadowModeActive = false;
             _profileSetButton.inactive = true;
@@ -647,6 +732,12 @@ namespace DMSxMeadow
             _nativeBackup = null;
             _borrowedPlayerIndex = -1;
             _borrowedSlugcat = "";
+            
+            // Resetear flags de foco
+            _lastConfirmedSteamId = "";
+            _lastConfirmedProfileNumber = "";
+            _profileFieldWasHeld = false;
+            _steamFieldWasHeld = false;
             
             MeadowProfileManager.IsMeadowModeActive = false;
             _profileSetButton.inactive = true;
