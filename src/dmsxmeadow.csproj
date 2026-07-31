@@ -27,6 +27,19 @@
       <HintPath>..\lib\UnityEngine.CoreModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    
+    <!-- ============================================================ -->
+    <!-- INPUT Y GUIUTILITY (necesarios para Ctrl+V)                  -->
+    <!-- ============================================================ -->
+    <Reference Include="UnityEngine.InputLegacyModule">
+      <HintPath>..\lib\UnityEngine.InputLegacyModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.IMGUIModule">
+      <HintPath>..\lib\UnityEngine.IMGUIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    
     <Reference Include="Assembly-CSharp">
       <HintPath>..\lib\PUBLIC-Assembly-CSharp.dll</HintPath>
       <Private>false</Private>

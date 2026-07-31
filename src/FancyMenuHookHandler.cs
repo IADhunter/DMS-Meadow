@@ -176,6 +176,7 @@ namespace DMSxMeadow
                         {
                             ui.CheckFieldFocusLoss();
                             ui.CheckSlugcatChange();
+                            ui.CheckPasteInput(); // <-- NUEVO
                         }
                     }
                 }
@@ -196,6 +197,7 @@ namespace DMSxMeadow
                         {
                             ui.CheckFieldFocusLoss();
                             ui.CheckSlugcatChange();
+                            ui.CheckPasteInput(); // <-- NUEVO
                         }
                     }
                 }
@@ -218,6 +220,7 @@ namespace DMSxMeadow
                             {
                                 ui.CheckFieldFocusLoss();
                                 ui.CheckSlugcatChange();
+                                ui.CheckPasteInput(); // <-- NUEVO
                             }
                         }
                     }

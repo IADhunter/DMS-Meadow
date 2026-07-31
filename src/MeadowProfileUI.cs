@@ -27,6 +27,9 @@ namespace DMSxMeadow
         private string _pendingProfileInput = "1";
         private string _lastKnownSlugcat = "";
 
+        // Cache para reflexión (se inicializa una sola vez)
+        private static System.Reflection.FieldInfo _uiConfigValueField;
+
         public MeadowProfileUI(DressMySlugcat.FancyMenu fancyMenu)
         {
             _fancyMenu = fancyMenu;
@@ -180,8 +183,8 @@ namespace DMSxMeadow
                     new Vector2(startX + 65f, yPos + 35f + yOffset),
                     150f
                 );
-                _steamIdField.allowSpace = false;
-                _steamIdField.maxLength = 20;
+                _steamIdField.allowSpace = true;
+                _steamIdField.maxLength = 30;
                 _steamIdField.greyedOut = true;
                 _steamIdField.value = "unassigned";
                 new UIelementWrapper(_tabWrapper, _steamIdField);
@@ -206,6 +209,18 @@ namespace DMSxMeadow
                 _profileNumberField.OnValueChanged += OnProfileNumberChanged;
 
                 _lastKnownSlugcat = _fancyMenu.selectedSlugcat;
+
+                // Cachear el campo _value de UIconfig para usarlo en CheckPasteInput
+                if (_uiConfigValueField == null)
+                {
+                    _uiConfigValueField = typeof(UIconfig).GetField("_value",
+                        System.Reflection.BindingFlags.NonPublic |
+                        System.Reflection.BindingFlags.Instance);
+                    if (_uiConfigValueField == null)
+                    {
+                        Plugin.Logger.LogWarning("Could not find UIconfig._value field - paste will use fallback");
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -635,6 +650,47 @@ namespace DMSxMeadow
             RefreshDummyAndControls();
 
             Plugin.Logger.LogInfo("ForceDeactivateMeadowMode completed");
+        }
+
+        // ============================================================
+        // Manejo de Ctrl+V para pegar desde portapapeles
+        // ============================================================
+        public void CheckPasteInput()
+        {
+            if (!MeadowProfileManager.IsMeadowModeActive) return;
+            if (_steamIdField == null) return;
+
+            bool steamHeld = GetHeld(_steamIdField);
+            if (!steamHeld) return;
+
+            if (Input.GetKeyDown(KeyCode.V) &&
+                (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)))
+            {
+                string clipboard = GUIUtility.systemCopyBuffer;
+                if (!string.IsNullOrEmpty(clipboard))
+                {
+                    string clean = clipboard.Trim();
+
+                    // ============================================================
+                    // Saltar el setter de OpTextBox que filtra caracteres.
+                    // Escribimos directamente en el campo _value de UIconfig.
+                    // ============================================================
+                    if (_uiConfigValueField != null)
+                    {
+                        _uiConfigValueField.SetValue(_steamIdField, clean);
+                        _steamIdField.Change(); // Actualiza el label visualmente
+                        Plugin.Logger.LogInfo($"Pasted into Steam ID field (bypass filter): '{clean}'");
+                        _statusLabel.text = "Steam ID pasted - press ENTER or click away to save";
+                    }
+                    else
+                    {
+                        // Fallback: usar el setter normal (puede filtrar)
+                        _steamIdField.value = clean;
+                        Plugin.Logger.LogInfo($"Pasted into Steam ID field (fallback): '{clean}'");
+                        _statusLabel.text = "Steam ID pasted (fallback)";
+                    }
+                }
+            }
         }
     }
 }
