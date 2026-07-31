@@ -73,7 +73,7 @@ namespace DMSxMeadow
 
                 float leftAnchor = (1366f - _fancyMenu.manager.rainWorld.options.ScreenSize.x) / 2f;
 
-                float offsetX = -265f;
+                float offsetX = 25f;
                 float offsetY = 25f;
 
                 float baseStartX = textBoxBorder.pos.x + (65f * playerCount) + 10f - leftAnchor;
@@ -596,12 +596,10 @@ namespace DMSxMeadow
                     {
                         _uiConfigValueField.SetValue(_steamIdField, clean);
                         _steamIdField.Change();
-                        _statusLabel.text = "Player ID pasted - press ENTER or click away to save";
                     }
                     else
                     {
                         _steamIdField.value = clean;
-                        _statusLabel.text = "Player ID pasted (fallback)";
                     }
                 }
             }
