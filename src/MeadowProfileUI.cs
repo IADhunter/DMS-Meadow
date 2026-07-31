@@ -71,22 +71,37 @@ namespace DMSxMeadow
                     }
                 }
 
-                float leftAnchor = (1366f - _fancyMenu.manager.rainWorld.options.ScreenSize.x) / 2f;
+                // ============================================================
+                // POSICIONAMIENTO RESPONSIVO A RESOLUCIÓN
+                // ============================================================
+                // textBoxBorder.pos.x YA incluye leftAnchor.
+                // NO restamos leftAnchor para que el desplazamiento se mantenga.
+                // ============================================================
+                float baseStartX = textBoxBorder.pos.x + (65f * playerCount) + 10f;
 
-                float offsetX = 25f;
-                float offsetY = 25f;
+                // ============================================================
+                // LIMITACIÓN DE SEGURIDAD: evitar invadir el área de los botones
+                // de control de DMS (reset/defaults/copy/paste) que se anclan
+                // al borde derecho de la caja en resoluciones angostas.
+                // ============================================================
+                float maxSafeX = textBoxBorder.pos.x + textBoxBorder.size.x - 260f;
+                baseStartX = Mathf.Min(baseStartX, maxSafeX);
 
-                float baseStartX = textBoxBorder.pos.x + (65f * playerCount) + 10f - leftAnchor;
-                float baseYPos = textBoxBorder.pos.y - 40f;
+                // ============================================================
+                // AJUSTE GENERAL DE POSICIÓN (X)
+                // ============================================================
+                float positionOffsetX = -10f;
+                baseStartX += positionOffsetX;
 
-                float startX = baseStartX + offsetX;
-                float yPos = baseYPos + offsetY;
+                // ============================================================
+                // FILA PROPIA: Y = -80f (debajo de Player buttons, lejos de
+                // los botones de control en Y = +20f)
+                // ============================================================
+                float baseYPos = textBoxBorder.pos.y - 75f;
 
-                if (startX < 0 || startX > 1366f)
-                {
-                    startX = 100f;
-                    yPos = 100f;
-                }
+                // ============================================================
+                // CREACIÓN DE UI
+                // ============================================================
 
                 _tabWrapper = new MenuTabWrapper(_fancyMenu, _fancyMenu.pages[0]);
                 _fancyMenu.pages[0].subObjects.Add(_tabWrapper);
@@ -97,7 +112,7 @@ namespace DMSxMeadow
                     _fancyMenu.pages[0],
                     "MEADOW",
                     "MEADOW_SERIES",
-                    new Vector2(baseStartX, baseYPos),
+                    new Vector2(baseStartX, baseYPos + 35f),
                     new Vector2(80f, 30f),
                     meadowArray,
                     0
@@ -107,11 +122,21 @@ namespace DMSxMeadow
 
                 float yOffset = 0f;
 
+                // ============================================================
+                // AJUSTE DE POSICIÓN SOLO SECCIÓN (Y)
+                // ============================================================
+                float sectionOffsetY = 25f;
+
+                // ============================================================
+                // AJUSTE DE POSICIÓN SOLO SECCIÓN (X)
+                // ============================================================
+                float sectionOffsetX = 12f;
+
                 _profileLabel = new MenuLabel(
                     _fancyMenu,
                     _fancyMenu.pages[0],
                     "Profile:",
-                    new Vector2(startX, yPos + 35f + yOffset),
+                    new Vector2(baseStartX + sectionOffsetX + 3f, baseYPos + 35f + yOffset + 35f + sectionOffsetY),
                     new Vector2(60f, 20f),
                     false
                 );
@@ -126,7 +151,7 @@ namespace DMSxMeadow
                 );
                 _profileNumberField = new OpTextBox(
                     profileNumberConfig,
-                    new Vector2(startX + 86f, yPos + 35f + yOffset),
+                    new Vector2(baseStartX + 86f + sectionOffsetX, baseYPos + 35f + yOffset + 35f + sectionOffsetY),
                     60f
                 );
                 _profileNumberField.allowSpace = false;
@@ -139,7 +164,7 @@ namespace DMSxMeadow
                     _fancyMenu.pages[0],
                     "SET",
                     "PROFILE_SET",
-                    new Vector2(startX + 151f, yPos + 35f + yOffset),
+                    new Vector2(baseStartX + 151f + sectionOffsetX, baseYPos + 35f + yOffset + 35f + sectionOffsetY),
                     new Vector2(40f, 30f)
                 );
                 _fancyMenu.pages[0].subObjects.Add(_profileSetButton);
@@ -153,7 +178,7 @@ namespace DMSxMeadow
                     _fancyMenu,
                     _fancyMenu.pages[0],
                     "Player ID:",
-                    new Vector2(startX + playerIdOffsetX, yPos + 35f + yOffset),
+                    new Vector2(baseStartX + playerIdOffsetX + sectionOffsetX + 3f, baseYPos + 35f + yOffset + 35f + sectionOffsetY),
                     new Vector2(90f, 20f),
                     false
                 );
@@ -167,8 +192,8 @@ namespace DMSxMeadow
                 );
                 _steamIdField = new OpTextBox(
                     steamConfig,
-                    new Vector2(startX + 95f + playerIdOffsetX, yPos + 35f + yOffset),
-                    150f
+                    new Vector2(baseStartX + 95f + playerIdOffsetX + sectionOffsetX, baseYPos + 35f + yOffset + 35f + sectionOffsetY),
+                    130f
                 );
                 _steamIdField.allowSpace = true;
                 _steamIdField.maxLength = 30;
@@ -182,7 +207,7 @@ namespace DMSxMeadow
                     _fancyMenu,
                     _fancyMenu.pages[0],
                     "",
-                    new Vector2(startX, yPos + 35f + yOffset),
+                    new Vector2(baseStartX + sectionOffsetX, baseYPos + 35f + yOffset + 35f + sectionOffsetY),
                     new Vector2(250f, 20f),
                     false
                 );
