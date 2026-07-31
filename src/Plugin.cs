@@ -15,23 +15,24 @@ namespace DMSxMeadow
     {
         public static Plugin Instance;
         public static new ManualLogSource Logger;
-        
+
         private Hook customizationHook;
-        
+        private bool isInit = false;
+
         public void Awake()
         {
             Instance = this;
             Logger = base.Logger;
-            
+
             try
             {
                 Logger.LogInfo("Initializing DMS x Meadow v2.0...");
-                
-                MeadowProfileManager.Load();
-                MeadowProfileManager.LogAllAssignments();
-                InitializeHooks();
-                FancyMenuHookHandler.Initialize();
-                
+
+                // ============================================================
+                // REGISTRAR OPCIONES DE REMIX
+                // ============================================================
+                On.RainWorld.OnModsInit += OnModsInit;
+
                 Logger.LogInfo("DMS x Meadow initialized successfully!");
                 Logger.LogInfo($"Profiles save path: {Application.persistentDataPath}/dressmyslugcat/meadowcustom.dat");
                 Logger.LogInfo($"Assignments save path: {Application.persistentDataPath}/dmsxmeadow/dmsxmeadow.txt");
@@ -42,19 +43,49 @@ namespace DMSxMeadow
                 Logger.LogError(ex.StackTrace);
             }
         }
-        
+
+        private void OnModsInit(On.RainWorld.orig_OnModsInit orig, RainWorld self)
+        {
+            orig(self);
+
+            try
+            {
+                if (isInit) return;
+                isInit = true;
+
+                Logger.LogInfo("Registering DMSxMeadow Options...");
+                MachineConnector.SetRegisteredOI("dmsxmeadow", DMSxMeadowOptions.Instance);
+
+                MeadowProfileManager.Load();
+                MeadowProfileManager.LogAllAssignments();
+
+                // ============================================================
+                // INICIALIZAR HOOKS - ¡AMBOS!
+                // ============================================================
+                InitializeHooks();              // Hook de Customization.For
+                FancyMenuHookHandler.Initialize(); // ¡ESTE FALTABA! - Hooks de FancyMenu
+
+                Logger.LogInfo("DMS x Meadow fully initialized!");
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"Error in OnModsInit: {ex.Message}");
+                Logger.LogError(ex.StackTrace);
+            }
+        }
+
         private void InitializeHooks()
         {
             try
             {
                 MethodInfo originalFor = typeof(DressMySlugcat.Customization)
                     .GetMethod("For", new Type[] { typeof(Player), typeof(bool) });
-                
+
                 if (originalFor != null)
                 {
                     MethodInfo hookFor = typeof(Plugin)
                         .GetMethod("Customization_For_Hook", BindingFlags.NonPublic | BindingFlags.Static);
-                    
+
                     if (hookFor != null)
                     {
                         customizationHook = new Hook(originalFor, hookFor);
@@ -67,7 +98,7 @@ namespace DMSxMeadow
                 Logger.LogError($"Hook application error: {ex.Message}");
             }
         }
-        
+
         // ============================================================
         // Customization_For_Hook - SIN EXCLUSIÓN DE isMe
         // ============================================================
@@ -84,7 +115,7 @@ namespace DMSxMeadow
                         player.abstractCreature, out var onlineEntity))
                     {
                         var owner = onlineEntity.owner;
-                        
+
                         // ✅ ELIMINADO: !owner.isMe - AHORA TAMBIÉN APLICA AL JUGADOR LOCAL
                         if (owner != null && owner.id != null)
                         {
@@ -99,22 +130,17 @@ namespace DMSxMeadow
                                 steamId = owner.id.ToString();
                                 Logger.LogInfo($"Detected non-Steam PlayerId: {steamId} (isMe: {owner.isMe})");
                             }
-                            
+
                             var customization = MeadowProfileManager.GetCustomizationBySteamID(steamId);
                             if (customization != null)
                             {
                                 Logger.LogInfo($"✅ Found meadow profile for SteamID: {steamId} (isMe: {owner.isMe})");
                                 var result = customization.Copy();
-                                
-                                // ✅ PlayerNumber se mantiene en 0 para compatibilidad
-                                //    pero no se fuerza a 0 si el perfil ya tiene otro valor
-                                //    (aunque en la práctica todos los perfiles Meadow usan 0)
                                 result.PlayerNumber = 0;
-                                
-                                // Log detallado para depuración
+
                                 Logger.LogInfo($"   - Tail.Length: {result.CustomTail.Length}");
                                 Logger.LogInfo($"   - CustomSprites: {result.CustomSprites.Count}");
-                                
+
                                 return result;
                             }
                             else
@@ -130,10 +156,10 @@ namespace DMSxMeadow
                 Logger.LogError($"Hook error: {ex.Message}");
                 Logger.LogError(ex.StackTrace);
             }
-            
+
             return orig(player, mergeDefaults);
         }
-        
+
         public void OnDestroy()
         {
             customizationHook?.Dispose();
