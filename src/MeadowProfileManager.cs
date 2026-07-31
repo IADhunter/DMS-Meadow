@@ -51,6 +51,11 @@ namespace DMSxMeadow
         private static Dictionary<string, int> _assignments = new Dictionary<string, int>();
         private static bool _assignmentsLoaded = false;
 
+        // ============================================================
+        // NUEVO: PERFILES EN MEMORIA (NO PERSISTIDOS) - PREVIENE HUÉRFANOS
+        // ============================================================
+        private static Dictionary<int, MeadowProfileData> _unsavedProfiles = new Dictionary<int, MeadowProfileData>();
+
         public static int GetInternalProfile(int displayNumber) => displayNumber + PROFILE_OFFSET;
         public static int GetDisplayNumber(int internalNumber) => internalNumber - PROFILE_OFFSET;
 
@@ -185,7 +190,7 @@ namespace DMSxMeadow
         }
 
         // ============================================================
-        // OPERACIONES CON PERFILES
+        // OPERACIONES CON PERFILES (VERSIÓN CORREGIDA - SIN HUÉRFANOS)
         // ============================================================
         public static MeadowProfileData GetOrCreateProfile(int displayNumber)
         {
@@ -196,25 +201,43 @@ namespace DMSxMeadow
             }
 
             int internalNumber = GetInternalProfile(displayNumber);
-
             if (Database.Profiles == null)
-            {
                 Database.Profiles = new Dictionary<int, MeadowProfileData>();
-            }
 
-            if (!Database.Profiles.TryGetValue(internalNumber, out var profile))
+            // 1) Ya persistido en disco
+            if (Database.Profiles.TryGetValue(internalNumber, out var persisted))
+                return persisted;
+
+            // 2) Ya existe una versión en memoria de esta sesión (sin guardar aún)
+            if (_unsavedProfiles.TryGetValue(displayNumber, out var scratch))
+                return scratch;
+
+            // 3) No existe en ningún lado: crear SOLO en memoria
+            var newProfile = new MeadowProfileData
             {
-                profile = new MeadowProfileData
-                {
-                    InternalProfileNumber = internalNumber,
-                    Customization = null
-                };
-                Database.Profiles[internalNumber] = profile;
-                Save();
-            }
-            return profile;
+                InternalProfileNumber = internalNumber,
+                Customization = null
+            };
+            _unsavedProfiles[displayNumber] = newProfile;
+            Plugin.Logger.LogInfo($"Created unsaved meadow profile {displayNumber} (in memory only)");
+            return newProfile;
         }
 
+        // ============================================================
+        // DESCARTAR BORRADOR EN MEMORIA SI NUNCA SE LE ASIGNÓ STEAMID
+        // ============================================================
+        private static void DiscardUnsavedIfOrphan(int displayNumber)
+        {
+            if (string.IsNullOrEmpty(GetSteamID(displayNumber)) && _unsavedProfiles.ContainsKey(displayNumber))
+            {
+                _unsavedProfiles.Remove(displayNumber);
+                Plugin.Logger.LogInfo($"Discarded unsaved profile {displayNumber} (no SteamID assigned)");
+            }
+        }
+
+        // ============================================================
+        // SET CURRENT PROFILE (VERSIÓN CORREGIDA)
+        // ============================================================
         public static void SetCurrentProfile(int displayNumber)
         {
             if (displayNumber < 1 || displayNumber > Database.MaxProfiles)
@@ -222,6 +245,9 @@ namespace DMSxMeadow
                 Plugin.Logger.LogWarning($"Profile {displayNumber} out of range");
                 return;
             }
+
+            // Descartar el perfil anterior si nunca se guardó
+            DiscardUnsavedIfOrphan(CurrentProfileNumber);
 
             CurrentProfileNumber = displayNumber;
             var profile = GetOrCreateProfile(displayNumber);
@@ -232,10 +258,13 @@ namespace DMSxMeadow
             }
             else
             {
-                Plugin.Logger.LogInfo($"New meadow profile {displayNumber} created (internal: {profile.InternalProfileNumber})");
+                Plugin.Logger.LogInfo($"New (unsaved) meadow profile {displayNumber} created in memory");
             }
         }
 
+        // ============================================================
+        // SAVE CURRENT PROFILE (VERSIÓN CORREGIDA - SOLO CON STEAMID)
+        // ============================================================
         public static void SaveCurrentProfile(DressMySlugcat.Customization customization)
         {
             if (!IsMeadowModeActive) return;
@@ -246,9 +275,22 @@ namespace DMSxMeadow
 
             profile.Customization = customization.Copy();
             profile.LastUpdated = DateTime.Now;
-            Save();
 
-            Plugin.Logger.LogInfo($"Saved meadow profile {CurrentProfileNumber} (internal: {profile.InternalProfileNumber})");
+            // SOLO SE GUARDA EN DISCO SI TIENE STEAMID ASIGNADO
+            string steamId = GetSteamID(CurrentProfileNumber);
+            if (!string.IsNullOrEmpty(steamId))
+            {
+                // Promover a persistente: ahora sí se escribe a disco
+                int internalNumber = GetInternalProfile(CurrentProfileNumber);
+                Database.Profiles[internalNumber] = profile;
+                _unsavedProfiles.Remove(CurrentProfileNumber);
+                Save();
+                Plugin.Logger.LogInfo($"Saved meadow profile {CurrentProfileNumber} to disk (SteamID: {steamId})");
+            }
+            else
+            {
+                Plugin.Logger.LogInfo($"Profile {CurrentProfileNumber} has no SteamID - changes kept in memory only, not saved to disk");
+            }
         }
 
         public static DressMySlugcat.Customization GetProfileCustomization(int displayNumber)
@@ -258,7 +300,7 @@ namespace DMSxMeadow
         }
 
         // ============================================================
-        // OPERACIONES CON ASIGNACIONES SteamID
+        // OPERACIONES CON ASIGNACIONES SteamID (VERSIÓN CORREGIDA)
         // ============================================================
         public static void SetSteamID(int displayNumber, string steamID)
         {
@@ -273,12 +315,21 @@ namespace DMSxMeadow
             // Después, si el nuevo SteamID no está vacío, asignarlo
             if (!string.IsNullOrEmpty(steamID))
             {
-                // Si el SteamID ya existe en otra entrada, la sobreescribimos (reasignación)
                 _assignments[steamID] = displayNumber;
             }
 
             SaveAssignments();
             Plugin.Logger.LogInfo($"SteamID assignment updated: profile {displayNumber} -> '{steamID}'");
+
+            // SI HABÍA UN BORRADOR EN MEMORIA, PROMOVERLO A DISCO
+            if (!string.IsNullOrEmpty(steamID) && _unsavedProfiles.TryGetValue(displayNumber, out var pending))
+            {
+                int internalNumber = GetInternalProfile(displayNumber);
+                Database.Profiles[internalNumber] = pending;
+                _unsavedProfiles.Remove(displayNumber);
+                Save();
+                Plugin.Logger.LogInfo($"✅ Profile {displayNumber} promoted to disk after SteamID assignment");
+            }
         }
 
         public static string GetSteamID(int displayNumber)
@@ -356,24 +407,34 @@ namespace DMSxMeadow
                         result.Add(kvp.Value);
                     }
                 }
+
+                // También incluir perfiles en memoria (borradores)
+                foreach (int displayNum in _unsavedProfiles.Keys)
+                {
+                    if (displayNum >= 1 && displayNum <= Database.MaxProfiles)
+                    {
+                        result.Add(displayNum);
+                    }
+                }
             }
             catch (Exception ex)
             {
                 Plugin.Logger.LogError($"Error getting all profile numbers: {ex.Message}");
             }
 
-            // FIX CS1061: ToList() disponible con using System.Linq;
             return result.ToList();
         }
 
         // ============================================================
-        // ELIMINAR PERFIL (de meadowcustom.dat)
+        // ELIMINAR PERFIL (de meadowcustom.dat y de memoria)
         // ============================================================
         public static void DeleteProfile(int displayNumber)
         {
             try
             {
                 int internalNum = GetInternalProfile(displayNumber);
+
+                // Eliminar de disco si existe
                 if (Database.Profiles != null && Database.Profiles.ContainsKey(internalNum))
                 {
                     Database.Profiles.Remove(internalNum);
@@ -383,6 +444,13 @@ namespace DMSxMeadow
                 else
                 {
                     Plugin.Logger.LogInfo($"Profile {displayNumber} not found in meadowcustom.dat");
+                }
+
+                // Eliminar de memoria si existe (borrador no guardado)
+                if (_unsavedProfiles.ContainsKey(displayNumber))
+                {
+                    _unsavedProfiles.Remove(displayNumber);
+                    Plugin.Logger.LogInfo($"Deleted unsaved profile {displayNumber} from memory");
                 }
             }
             catch (Exception ex)
@@ -423,6 +491,9 @@ namespace DMSxMeadow
                 {
                     Plugin.Logger.LogInfo($"No assignment found for profile {displayNumber}");
                 }
+
+                // Si el perfil existe en memoria y no tiene SteamID, descartarlo
+                DiscardUnsavedIfOrphan(displayNumber);
             }
             catch (Exception ex)
             {
@@ -439,6 +510,11 @@ namespace DMSxMeadow
             {
                 int internalNum = GetInternalProfile(displayNumber);
                 if (Database.Profiles != null && Database.Profiles.ContainsKey(internalNum))
+                {
+                    return true;
+                }
+
+                if (_unsavedProfiles.ContainsKey(displayNumber))
                 {
                     return true;
                 }
@@ -503,7 +579,24 @@ namespace DMSxMeadow
                     }
                 }
 
-                Plugin.Logger.LogInfo($"Deleted {deleted} orphan profiles");
+                // También limpiar borradores en memoria que no tienen SteamID
+                var toRemoveMemory = new List<int>();
+                foreach (int displayNum in _unsavedProfiles.Keys)
+                {
+                    if (string.IsNullOrEmpty(GetSteamID(displayNum)))
+                    {
+                        toRemoveMemory.Add(displayNum);
+                    }
+                }
+
+                foreach (int displayNum in toRemoveMemory)
+                {
+                    _unsavedProfiles.Remove(displayNum);
+                    deleted++;
+                    Plugin.Logger.LogInfo($"Deleted unsaved orphan profile {displayNum} from memory");
+                }
+
+                Plugin.Logger.LogInfo($"Deleted {deleted} orphan profiles total");
             }
             catch (Exception ex)
             {
@@ -539,7 +632,8 @@ namespace DMSxMeadow
             {
                 string steamId = GetSteamID(profileNum);
                 bool hasData = Database.Profiles != null && Database.Profiles.ContainsKey(GetInternalProfile(profileNum));
-                Plugin.Logger.LogInfo($"  Profile {profileNum}: SteamID='{steamId}', HasData={hasData}");
+                bool isUnsaved = _unsavedProfiles.ContainsKey(profileNum);
+                Plugin.Logger.LogInfo($"  Profile {profileNum}: SteamID='{steamId}', HasData={hasData}, Unsaved={isUnsaved}");
             }
             Plugin.Logger.LogInfo("=== END PROFILES ===");
         }
