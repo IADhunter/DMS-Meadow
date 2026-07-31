@@ -196,9 +196,16 @@ namespace DMSxMeadow
                     130f
                 );
                 _steamIdField.allowSpace = true;
-                _steamIdField.maxLength = 30;
+                _steamIdField.maxLength = 17;
                 _steamIdField.greyedOut = true;
                 _steamIdField.value = "unassigned";
+                _steamIdField.OnValueChanged += (sender, oldV, newV) =>
+                {
+                    if (newV.Length > 18)
+                    {
+                        _steamIdField.value = newV.Substring(0, 18);
+                    }
+                };
                 new UIelementWrapper(_tabWrapper, _steamIdField);
 
                 yOffset = 70f;
