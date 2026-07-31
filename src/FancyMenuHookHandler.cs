@@ -9,8 +9,8 @@ namespace DMSxMeadow
 {
     public static class FancyMenuHookHandler
     {
-        private static Hook signalHook;
         private static Hook updateHook;
+        private static Hook signalHook;
         private static Hook getSelectedHook;
         private static Hook setSelectedHook;
         private static Hook shutdownHook;
@@ -36,7 +36,6 @@ namespace DMSxMeadow
                     if (hookMethod != null)
                     {
                         updateHook = new Hook(updateMethod, hookMethod);
-                        Plugin.Logger.LogInfo("ProcessManager.Update hooked");
                     }
                 }
 
@@ -50,7 +49,6 @@ namespace DMSxMeadow
                     if (hookSignal != null)
                     {
                         signalHook = new Hook(signalMethod, hookSignal);
-                        Plugin.Logger.LogInfo("FancyMenu.Singal hooked");
                     }
                 }
 
@@ -64,7 +62,6 @@ namespace DMSxMeadow
                     if (hookGetSel != null)
                     {
                         getSelectedHook = new Hook(getSelMethod, hookGetSel);
-                        Plugin.Logger.LogInfo("GetCurrentlySelectedOfSeries hooked");
                     }
                 }
 
@@ -78,7 +75,6 @@ namespace DMSxMeadow
                     if (hookSetSel != null)
                     {
                         setSelectedHook = new Hook(setSelMethod, hookSetSel);
-                        Plugin.Logger.LogInfo("SetCurrentlySelectedOfSeries hooked");
                     }
                 }
 
@@ -92,7 +88,6 @@ namespace DMSxMeadow
                     if (hookShutdown != null)
                     {
                         shutdownHook = new Hook(shutdownMethod, hookShutdown);
-                        Plugin.Logger.LogInfo("FancyMenu.ShutDownProcess hooked (security)");
                     }
                 }
 
@@ -108,7 +103,6 @@ namespace DMSxMeadow
                     if (hookFor3Arg != null)
                     {
                         customizationFor3ArgHook = new Hook(for3Arg, hookFor3Arg);
-                        Plugin.Logger.LogInfo("Customization.For(string,int,bool) hooked (Meadow live object)");
                     }
                 }
             }
@@ -137,7 +131,6 @@ namespace DMSxMeadow
                         PlayerNumber = playerNumber
                     };
                     _liveMeadowCustomizations[slugcatName] = live;
-                    Plugin.Logger.LogInfo($"Created live Meadow customization for slugcat '{slugcatName}'");
                 }
 
                 if (live.Slugcat != slugcatName)
@@ -165,7 +158,6 @@ namespace DMSxMeadow
                     _currentFancyMenu = fancyMenu;
                     if (!_uiInstances.ContainsKey(fancyMenu))
                     {
-                        Plugin.Logger.LogInfo("FancyMenu detected as currentMainLoop - creating UI");
                         var ui = new MeadowProfileUI(fancyMenu);
                         ui.Initialize();
                         _uiInstances[fancyMenu] = ui;
@@ -176,7 +168,7 @@ namespace DMSxMeadow
                         {
                             ui.CheckFieldFocusLoss();
                             ui.CheckSlugcatChange();
-                            ui.CheckPasteInput(); // <-- NUEVO
+                            ui.CheckPasteInput();
                         }
                     }
                 }
@@ -186,7 +178,6 @@ namespace DMSxMeadow
                     _currentFancyMenu = fancyMenuDialog;
                     if (!_uiInstances.ContainsKey(fancyMenuDialog))
                     {
-                        Plugin.Logger.LogInfo("FancyMenu detected as dialog (pause menu) - creating UI");
                         var ui = new MeadowProfileUI(fancyMenuDialog);
                         ui.Initialize();
                         _uiInstances[fancyMenuDialog] = ui;
@@ -197,7 +188,7 @@ namespace DMSxMeadow
                         {
                             ui.CheckFieldFocusLoss();
                             ui.CheckSlugcatChange();
-                            ui.CheckPasteInput(); // <-- NUEVO
+                            ui.CheckPasteInput();
                         }
                     }
                 }
@@ -209,7 +200,6 @@ namespace DMSxMeadow
                         _currentFancyMenu = fancyMenuSide;
                         if (!_uiInstances.ContainsKey(fancyMenuSide))
                         {
-                            Plugin.Logger.LogInfo("FancyMenu detected in sideProcesses - creating UI");
                             var ui = new MeadowProfileUI(fancyMenuSide);
                             ui.Initialize();
                             _uiInstances[fancyMenuSide] = ui;
@@ -220,7 +210,7 @@ namespace DMSxMeadow
                             {
                                 ui.CheckFieldFocusLoss();
                                 ui.CheckSlugcatChange();
-                                ui.CheckPasteInput(); // <-- NUEVO
+                                ui.CheckPasteInput();
                             }
                         }
                     }
@@ -267,7 +257,6 @@ namespace DMSxMeadow
 
             if (series.StartsWith("PLAYER_") && MeadowProfileManager.IsMeadowModeActive)
             {
-                Plugin.Logger.LogInfo($"Player button clicked while Meadow active - deactivating Meadow first");
                 if (_uiInstances.TryGetValue(self, out var ui))
                 {
                     ui.DeactivateMeadowMode();
@@ -287,13 +276,11 @@ namespace DMSxMeadow
                 {
                     if (MeadowProfileManager.IsMeadowModeActive)
                     {
-                        Plugin.Logger.LogWarning("Shutting down FancyMenu while Meadow active - forcing deactivation!");
                         ui.ForceDeactivateMeadowMode();
                     }
 
                     _uiInstances.Remove(self);
                     _currentFancyMenu = null;
-                    Plugin.Logger.LogInfo("Removed FancyMenu instance from UI cache");
                 }
             }
             catch (Exception ex)
@@ -338,7 +325,6 @@ namespace DMSxMeadow
                     if (_uiInstances.TryGetValue(fancyMenu, out var ui))
                     {
                         ui.SaveCurrentProfile();
-                        Plugin.Logger.LogInfo($"Auto-saved meadow profile after: {message}");
                     }
                 }
                 catch (Exception ex)
@@ -361,7 +347,6 @@ namespace DMSxMeadow
             _uiInstances.Clear();
             _currentFancyMenu = null;
             _liveMeadowCustomizations.Clear();
-            Plugin.Logger.LogInfo("FancyMenu hooks disposed");
         }
     }
 }

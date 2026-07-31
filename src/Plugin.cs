@@ -26,13 +26,7 @@ namespace DMSxMeadow
 
             try
             {
-                Logger.LogInfo("Initializing DMS x Meadow v2.0...");
-
                 On.RainWorld.OnModsInit += OnModsInit;
-
-                Logger.LogInfo("DMS x Meadow initialized successfully!");
-                Logger.LogInfo($"Profiles save path: {Application.persistentDataPath}/dressmyslugcat/meadowcustom.dat");
-                Logger.LogInfo($"Assignments save path: {Application.persistentDataPath}/dmsxmeadow/dmsxmeadow.txt");
             }
             catch (Exception ex)
             {
@@ -50,16 +44,12 @@ namespace DMSxMeadow
                 if (isInit) return;
                 isInit = true;
 
-                Logger.LogInfo("Registering DMSxMeadow Options...");
                 MachineConnector.SetRegisteredOI("dmsxmeadow", DMSxMeadowOptions.Instance);
 
                 MeadowProfileManager.Load();
-                MeadowProfileManager.LogAllAssignments();
 
                 InitializeHooks();
                 FancyMenuHookHandler.Initialize();
-
-                Logger.LogInfo("DMS x Meadow fully initialized!");
             }
             catch (Exception ex)
             {
@@ -83,7 +73,6 @@ namespace DMSxMeadow
                     if (hookFor != null)
                     {
                         customizationHook = new Hook(originalFor, hookFor);
-                        Logger.LogInfo("Customization.For hook applied");
                     }
                 }
             }
@@ -113,32 +102,20 @@ namespace DMSxMeadow
                             if (owner.id is RainMeadow.SteamMatchmakingManager.SteamPlayerId steamPlayerId)
                             {
                                 steamId = steamPlayerId.steamID.m_SteamID.ToString();
-                                Logger.LogInfo($"Detected SteamPlayerId: {steamId} (isMe: {owner.isMe})");
                             }
                             else
                             {
                                 steamId = owner.id.ToString();
-                                Logger.LogInfo($"Detected non-Steam PlayerId: {steamId} (isMe: {owner.isMe})");
                             }
 
-                            // Obtener el slugcat exacto de este jugador
                             string slugcatName = player.slugcatStats.name.value;
 
                             var customization = MeadowProfileManager.GetCustomizationBySteamID(steamId, slugcatName);
                             if (customization != null)
                             {
-                                Logger.LogInfo($"✅ Found meadow profile for SteamID: {steamId}, slugcat: {slugcatName} (isMe: {owner.isMe})");
                                 var result = customization.Copy();
                                 result.PlayerNumber = 0;
-
-                                Logger.LogInfo($"   - Tail.Length: {result.CustomTail.Length}");
-                                Logger.LogInfo($"   - CustomSprites: {result.CustomSprites.Count}");
-
                                 return result;
-                            }
-                            else
-                            {
-                                Logger.LogInfo($"No meadow profile found for SteamID: {steamId}, slugcat: {slugcatName} (isMe: {owner.isMe})");
                             }
                         }
                     }
@@ -157,7 +134,6 @@ namespace DMSxMeadow
         {
             customizationHook?.Dispose();
             FancyMenuHookHandler.Dispose();
-            Logger.LogInfo("DMS x Meadow unloaded");
         }
     }
 }

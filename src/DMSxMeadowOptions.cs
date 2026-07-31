@@ -15,7 +15,6 @@ namespace DMSxMeadow
         private OpScrollBox _scrollBox;
         private OpTextBox _searchBox;
         private OpSimpleButton _modeButton;
-        private OpSimpleButton _deleteOrphansButton;
         private bool _searchBySteamId = true;
         private List<ProfileRow> _currentRows = new List<ProfileRow>();
 
@@ -41,46 +40,46 @@ namespace DMSxMeadow
             Tabs = new[] { opTab };
 
             // ============================================================
+            // TÍTULO DE LA SECCIÓN
+            // ============================================================
+            float row1Y = 515f;
+            float searchRowOffsetX = -21f;
+            float titleY = row1Y + 55f;
+
+            var titleLabel = new OpLabel(
+                new Vector2(20f + searchRowOffsetX + 124f, titleY),
+                new Vector2(350f, 20f),
+                "PROFILE MANAGER",
+                FLabelAlignment.Center,
+                false
+            );
+            opTab.AddItems(titleLabel);
+
+            // ============================================================
             // FILA SUPERIOR: CAMPO DE BÚSQUEDA + MODO
             // ============================================================
-            float row1Y = 540f;
 
-            // CAMPO DE BÚSQUEDA (filtra en tiempo real)
             if (_searchConfig == null)
             {
                 _searchConfig = this.config.Bind<string>("searchQuery", "", new ConfigurableInfo("Search query"));
             }
 
-            _searchBox = new OpTextBox(_searchConfig, new Vector2(20f, row1Y), 200f);
+            _searchBox = new OpTextBox(_searchConfig, new Vector2(20f + searchRowOffsetX, row1Y), 200f);
             _searchBox.OnValueChanged += (sender, oldV, newV) => RefreshList();
             opTab.AddItems(_searchBox);
 
-            // BOTÓN DE MODO (alterna SteamID / Perfil #)
             _modeButton = new OpSimpleButton(
-                new Vector2(230f, row1Y),
+                new Vector2(230f + searchRowOffsetX, row1Y),
                 new Vector2(140f, 24f),
-                _searchBySteamId ? "Buscar: SteamID" : "Buscar: Perfil #"
+                _searchBySteamId ? "Buscar: Player ID" : "Buscar: Perfil #"
             );
             _modeButton.OnClick += (_) =>
             {
                 _searchBySteamId = !_searchBySteamId;
-                _modeButton.text = _searchBySteamId ? "Buscar: SteamID" : "Buscar: Perfil #";
+                _modeButton.text = _searchBySteamId ? "Buscar: Player ID" : "Buscar: Perfil #";
                 RefreshList();
             };
             opTab.AddItems(_modeButton);
-
-            // ============================================================
-            // FILA 2: BOTÓN DE ELIMINAR HUÉRFANOS
-            // ============================================================
-            float row2Y = 510f;
-
-            _deleteOrphansButton = new OpSimpleButton(
-                new Vector2(20f, row2Y),
-                new Vector2(160f, 24f),
-                "🗑️ Eliminar huérfanos"
-            );
-            _deleteOrphansButton.OnClick += (_) => DeleteOrphans();
-            opTab.AddItems(_deleteOrphansButton);
 
             // ============================================================
             // SCROLL BOX DE PERFILES
@@ -103,15 +102,16 @@ namespace DMSxMeadow
             };
             opTab.AddItems(_scrollBox);
 
-            // ============================================================
-            // CACHAR MÉTODO Unload PARA REUTILIZAR
-            // ============================================================
             if (_unloadMethod == null)
             {
                 _unloadMethod = typeof(UIelement).GetMethod("Unload",
                     BindingFlags.NonPublic | BindingFlags.Instance);
             }
 
+            // ============================================================
+            // LIMPIEZA AUTOMÁTICA DE HUÉRFANOS
+            // ============================================================
+            MeadowProfileManager.DeleteOrphanProfiles();
             RefreshList();
         }
 
@@ -136,13 +136,11 @@ namespace DMSxMeadow
             try
             {
                 // ============================================================
-                // 1. ELIMINAR FILAS ACTUALES (lógica + gráficos)
+                // 1. ELIMINAR FILAS ACTUALES
                 // ============================================================
                 foreach (var row in _currentRows)
                 {
                     OpScrollBox.RemoveItemsFromScrollBox(row.Label, row.DeleteButton);
-                    
-                    // ¡CRUCIAL! Eliminar los gráficos de pantalla
                     UnloadElement(row.Label);
                     UnloadElement(row.DeleteButton);
                 }
@@ -179,7 +177,7 @@ namespace DMSxMeadow
                 }
 
                 // ============================================================
-                // 4. ORDENAR DE MENOR A MAYOR (1, 2, 3...)
+                // 4. ORDENAR DE MENOR A MAYOR
                 // ============================================================
                 matchingProfiles = matchingProfiles.OrderBy(x => x.num).ToList();
 
@@ -189,7 +187,7 @@ namespace DMSxMeadow
                 float contentHeight = Math.Max(matchingProfiles.Count * ROW_HEIGHT + 20f, VISIBLE_HEIGHT);
 
                 // ============================================================
-                // 6. COLOCAR FILAS - DESDE ARRIBA (contentHeight) HACIA ABAJO
+                // 6. COLOCAR FILAS
                 // ============================================================
                 float y = contentHeight - ROW_HEIGHT - 10f;
 
@@ -250,28 +248,11 @@ namespace DMSxMeadow
             {
                 MeadowProfileManager.DeleteProfile(profileNumber);
                 MeadowProfileManager.RemoveAssignment(profileNumber);
-
-                Plugin.Logger.LogInfo($"Deleted meadow profile {profileNumber}");
-
                 RefreshList();
             }
             catch (Exception ex)
             {
                 Plugin.Logger.LogError($"Error deleting profile {profileNumber}: {ex.Message}");
-            }
-        }
-
-        private void DeleteOrphans()
-        {
-            try
-            {
-                int deleted = MeadowProfileManager.DeleteOrphanProfiles();
-                Plugin.Logger.LogInfo($"Deleted {deleted} orphan profiles");
-                RefreshList();
-            }
-            catch (Exception ex)
-            {
-                Plugin.Logger.LogError($"Error deleting orphan profiles: {ex.Message}");
             }
         }
     }
