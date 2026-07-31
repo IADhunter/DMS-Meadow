@@ -1,162 +1,139 @@
 ﻿using BepInEx;
+using BepInEx.Logging;
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using MonoMod.RuntimeDetour;
-using System.IO;
+using UnityEngine;
 
-namespace DressMySlugcatMeadowCompat
+namespace DMSxMeadow
 {
-    [BepInPlugin("dmsmeadowcompat", "Dress My Slugcat Meadow Compat", "1.0.0")]
+    [BepInPlugin("dmsxmeadow", "DMS x Meadow", "2.0.0")]
     [BepInDependency("dressmyslugcat", BepInDependency.DependencyFlags.HardDependency)]
     [BepInDependency("henpemaz.rainmeadow", BepInDependency.DependencyFlags.HardDependency)]
     public class Plugin : BaseUnityPlugin
     {
-        private Hook dmsHook;
-        public static Dictionary<string, string> DiccionarioSkins = new Dictionary<string, string>();
+        public static Plugin Instance;
+        public static new ManualLogSource Logger;
 
-        public void OnEnable()
+        private Hook customizationHook;
+        private bool isInit = false;
+
+        public void Awake()
         {
+            Instance = this;
+            Logger = base.Logger;
+
             try
             {
-                MethodInfo[] methods = typeof(DressMySlugcat.Customization).GetMethods(BindingFlags.Public | BindingFlags.Static);
-                MethodInfo metodoOriginal = methods.FirstOrDefault(m => m.Name == "For" && m.GetParameters().Length == 2 && m.GetParameters()[0].ParameterType == typeof(Player));
-                MethodInfo miMetodoHook = typeof(Plugin).GetMethod("Customization_For_Hook", BindingFlags.NonPublic | BindingFlags.Static);
-
-                if (metodoOriginal != null && miMetodoHook != null)
-                {
-                    dmsHook = new Hook(metodoOriginal, miMetodoHook);
-                }
+                On.RainWorld.OnModsInit += OnModsInit;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                return;
-            }
-
-            CargarConfiguracionSkins();
-        }
-
-        public void OnDisable()
-        {
-            try
-            {
-                if (dmsHook != null)
-                {
-                    dmsHook.Dispose();
-                    dmsHook = null;
-                }
-            }
-            catch (Exception)
-            {
-            
+                Logger.LogError($"Initialization error: {ex.Message}");
+                Logger.LogError(ex.StackTrace);
             }
         }
 
-        private static DressMySlugcat.Customization Customization_For_Hook(Func<Player, bool, DressMySlugcat.Customization> orig, Player player, bool mergeDefaults)
+        private void OnModsInit(On.RainWorld.orig_OnModsInit orig, RainWorld self)
         {
-            if (player != null && player.abstractCreature != null)
+            orig(self);
+
+            try
             {
-                if (RainMeadow.OnlinePhysicalObject.map.TryGetValue(player.abstractCreature, out var OnlineEntity))
+                if (isInit) return;
+                isInit = true;
+
+                MachineConnector.SetRegisteredOI("dmsxmeadow", DMSxMeadowOptions.Instance);
+
+                MeadowProfileManager.Load();
+
+                InitializeHooks();
+                FancyMenuHookHandler.Initialize();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"Error in OnModsInit: {ex.Message}");
+                Logger.LogError(ex.StackTrace);
+            }
+        }
+
+        private void InitializeHooks()
+        {
+            try
+            {
+                MethodInfo originalFor = typeof(DressMySlugcat.Customization)
+                    .GetMethod("For", new Type[] { typeof(Player), typeof(bool) });
+
+                if (originalFor != null)
                 {
-                    var owner = OnlineEntity.owner;
-                    if (owner != null && !owner.isMe && owner.id != null)
+                    MethodInfo hookFor = typeof(Plugin)
+                        .GetMethod("Customization_For_Hook", BindingFlags.NonPublic | BindingFlags.Static);
+
+                    if (hookFor != null)
                     {
-                        string steamId = owner.id.ToString();
-                        if (DiccionarioSkins.TryGetValue(steamId, out string assignedProfileStr))
+                        customizationHook = new Hook(originalFor, hookFor);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"Hook application error: {ex.Message}");
+            }
+        }
+
+        private static DressMySlugcat.Customization Customization_For_Hook(
+            Func<Player, bool, DressMySlugcat.Customization> orig,
+            Player player,
+            bool mergeDefaults)
+        {
+            try
+            {
+                if (player?.abstractCreature != null)
+                {
+                    if (RainMeadow.OnlinePhysicalObject.map.TryGetValue(
+                        player.abstractCreature, out var onlineEntity))
+                    {
+                        var owner = onlineEntity.owner;
+
+                        if (owner != null && owner.id != null)
                         {
-                            if (int.TryParse(assignedProfileStr, out int assignedProfile))
+                            string steamId;
+                            if (owner.id is RainMeadow.SteamMatchmakingManager.SteamPlayerId steamPlayerId)
                             {
-                                string slugcatClass = player.SlugCatClass.ToString();
-                                if (slugcatClass == "MeadowOnline") slugcatClass = "White";
+                                steamId = steamPlayerId.steamID.m_SteamID.ToString();
+                            }
+                            else
+                            {
+                                steamId = owner.id.ToString();
+                            }
 
-                                var customization = DressMySlugcat.SaveManager.Customizations.FirstOrDefault(x => x != null && x.Slugcat == slugcatClass && x.PlayerNumber == assignedProfile - 1);
+                            string slugcatName = player.slugcatStats.name.value;
 
-                                if (customization != null)
-                                {
-                                    var resultCopy = customization.Copy();
-
-                                    var customization2 = DressMySlugcat.SpriteDefinitions.GetSlugcatDefault(slugcatClass, assignedProfile)?.Copy();
-                                    if (customization2 != null)
-                                    {
-                                        if (!resultCopy.CustomTail.IsCustom)
-                                        {
-                                            resultCopy.CustomTail.Length = customization2.CustomTail.Length;
-                                            resultCopy.CustomTail.Wideness = customization2.CustomTail.Wideness;
-                                            resultCopy.CustomTail.Roundness = customization2.CustomTail.Roundness;
-                                            resultCopy.CustomTail.Lift = customization2.CustomTail.Lift;
-                                        }
-
-                                        if (resultCopy.CustomTail.Color == default(UnityEngine.Color))
-                                        {
-                                            resultCopy.CustomTail.Color = customization2.CustomTail.Color;
-                                        }
-
-                                        foreach (DressMySlugcat.CustomSprite sprite in customization2.CustomSprites)
-                                        {
-                                            if (!resultCopy.CustomSprites.Any(x => x.Sprite == sprite.Sprite))
-                                            {
-                                                resultCopy.CustomSprites.Add(sprite);
-                                            }
-                                        }
-                                    }
-
-                                    resultCopy.PlayerNumber = 0;
-                                    return resultCopy;
-                                }
+                            var customization = MeadowProfileManager.GetCustomizationBySteamID(steamId, slugcatName);
+                            if (customization != null)
+                            {
+                                var result = customization.Copy();
+                                result.PlayerNumber = 0;
+                                return result;
                             }
                         }
                     }
                 }
             }
+            catch (Exception ex)
+            {
+                Logger.LogError($"Hook error: {ex.Message}");
+                Logger.LogError(ex.StackTrace);
+            }
+
             return orig(player, mergeDefaults);
         }
 
-        private void CargarConfiguracionSkins()
+        public void OnDestroy()
         {
-            try
-            {
-                string path = Path.Combine(Path.GetDirectoryName(Info.Location), "dms_meadow_skins.txt");
-
-                if (!File.Exists(path))
-                {
-                    List<String> exampleLines = new List<string>
-                    {
-                        "# Skin configuration for Dress My Slugcat + Rain Meadow",
-                        "# Format -> STEAM_NAME:DMS_PROFILE_NUMBER",
-                        "# Example:",
-                        "SteamUserName:2",
-                        "omegaboom123:3"
-                    };
-                    File.WriteAllLines(path, exampleLines);
-                    return;
-                }
-
-                string[] lines = File.ReadAllLines(path);
-                DiccionarioSkins.Clear();
-
-                foreach (string line in lines)
-                {
-                    if (string.IsNullOrWhiteSpace(line) || line.Trim().StartsWith("#")) 
-                        continue;
-
-                    string[] parts = line.Split(':');
-                    if (parts.Length == 2)
-                    {
-                        string steamIdStr = parts[0].Trim();
-                        string assignedProfileStr = parts[1].Trim();
-
-                        if (!DiccionarioSkins.ContainsKey(steamIdStr))
-                        {
-                            DiccionarioSkins.Add(steamIdStr, assignedProfileStr);
-                        }
-                    }
-                }
-            }
-            catch (Exception)
-            {
-
-            }
+            customizationHook?.Dispose();
+            FancyMenuHookHandler.Dispose();
         }
     }
 }
