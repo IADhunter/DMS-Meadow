@@ -18,7 +18,7 @@ namespace DMSxMeadow
         private static Dictionary<DressMySlugcat.FancyMenu, MeadowProfileUI> _uiInstances = new Dictionary<DressMySlugcat.FancyMenu, MeadowProfileUI>();
 
         private static DressMySlugcat.FancyMenu _currentFancyMenu;
-        private static DressMySlugcat.Customization _liveMeadowCustomization;
+        private static Dictionary<string, DressMySlugcat.Customization> _liveMeadowCustomizations = new Dictionary<string, DressMySlugcat.Customization>();
 
         public static void Initialize()
         {
@@ -26,9 +26,6 @@ namespace DMSxMeadow
             {
                 Type fancyMenuType = typeof(DressMySlugcat.FancyMenu);
 
-                // ============================================================
-                // HOOK 1: ProcessManager.Update
-                // ============================================================
                 MethodInfo updateMethod = typeof(ProcessManager).GetMethod("Update");
                 if (updateMethod != null)
                 {
@@ -43,9 +40,6 @@ namespace DMSxMeadow
                     }
                 }
 
-                // ============================================================
-                // HOOK 2: FancyMenu.Singal
-                // ============================================================
                 MethodInfo signalMethod = fancyMenuType.GetMethod("Singal");
                 if (signalMethod != null)
                 {
@@ -60,9 +54,6 @@ namespace DMSxMeadow
                     }
                 }
 
-                // ============================================================
-                // HOOK 3: GetCurrentlySelectedOfSeries
-                // ============================================================
                 MethodInfo getSelMethod = fancyMenuType.GetMethod("GetCurrentlySelectedOfSeries");
                 if (getSelMethod != null)
                 {
@@ -77,9 +68,6 @@ namespace DMSxMeadow
                     }
                 }
 
-                // ============================================================
-                // HOOK 4: SetCurrentlySelectedOfSeries
-                // ============================================================
                 MethodInfo setSelMethod = fancyMenuType.GetMethod("SetCurrentlySelectedOfSeries");
                 if (setSelMethod != null)
                 {
@@ -94,9 +82,6 @@ namespace DMSxMeadow
                     }
                 }
 
-                // ============================================================
-                // HOOK 5: FancyMenu.ShutDownProcess
-                // ============================================================
                 MethodInfo shutdownMethod = fancyMenuType.GetMethod("ShutDownProcess");
                 if (shutdownMethod != null)
                 {
@@ -111,9 +96,6 @@ namespace DMSxMeadow
                     }
                 }
 
-                // ============================================================
-                // HOOK 6: Customization.For(string, int, bool) - NUEVO
-                // ============================================================
                 MethodInfo for3Arg = typeof(DressMySlugcat.Customization)
                     .GetMethod("For", new Type[] { typeof(string), typeof(int), typeof(bool) });
 
@@ -136,9 +118,6 @@ namespace DMSxMeadow
             }
         }
 
-        // ============================================================
-        // HOOK DE Customization.For(string, int, bool)
-        // ============================================================
         private static DressMySlugcat.Customization Customization_For3Arg_Hook(
             Func<string, int, bool, DressMySlugcat.Customization> orig,
             string slugcatName,
@@ -150,30 +129,28 @@ namespace DMSxMeadow
                 && slugcatName == _currentFancyMenu.selectedSlugcat
                 && playerNumber == _currentFancyMenu.selectedPlayerIndex)
             {
-                if (_liveMeadowCustomization == null)
+                if (!_liveMeadowCustomizations.TryGetValue(slugcatName, out var live))
                 {
-                    _liveMeadowCustomization = new DressMySlugcat.Customization
+                    live = new DressMySlugcat.Customization
                     {
                         Slugcat = slugcatName,
                         PlayerNumber = playerNumber
                     };
-                    Plugin.Logger.LogInfo($"Created live Meadow customization object for {slugcatName}:{playerNumber}");
+                    _liveMeadowCustomizations[slugcatName] = live;
+                    Plugin.Logger.LogInfo($"Created live Meadow customization for slugcat '{slugcatName}'");
                 }
 
-                if (_liveMeadowCustomization.Slugcat != slugcatName)
-                    _liveMeadowCustomization.Slugcat = slugcatName;
-                if (_liveMeadowCustomization.PlayerNumber != playerNumber)
-                    _liveMeadowCustomization.PlayerNumber = playerNumber;
+                if (live.Slugcat != slugcatName)
+                    live.Slugcat = slugcatName;
+                if (live.PlayerNumber != playerNumber)
+                    live.PlayerNumber = playerNumber;
 
-                return _liveMeadowCustomization;
+                return live;
             }
 
             return orig(slugcatName, playerNumber, mergeDefaults);
         }
 
-        // ============================================================
-        // HOOK DE Update
-        // ============================================================
         private static void Update_Hook(
             Action<ProcessManager, float> orig,
             ProcessManager self,
@@ -198,6 +175,7 @@ namespace DMSxMeadow
                         if (_uiInstances.TryGetValue(fancyMenu, out var ui))
                         {
                             ui.CheckFieldFocusLoss();
+                            ui.CheckSlugcatChange();
                         }
                     }
                 }
@@ -217,6 +195,7 @@ namespace DMSxMeadow
                         if (_uiInstances.TryGetValue(fancyMenuDialog, out var ui))
                         {
                             ui.CheckFieldFocusLoss();
+                            ui.CheckSlugcatChange();
                         }
                     }
                 }
@@ -238,6 +217,7 @@ namespace DMSxMeadow
                             if (_uiInstances.TryGetValue(fancyMenuSide, out var ui))
                             {
                                 ui.CheckFieldFocusLoss();
+                                ui.CheckSlugcatChange();
                             }
                         }
                     }
@@ -249,9 +229,6 @@ namespace DMSxMeadow
             }
         }
 
-        // ============================================================
-        // HOOK DE GetCurrentlySelectedOfSeries
-        // ============================================================
         private static int GetSelected_Hook(
             Func<DressMySlugcat.FancyMenu, string, int> orig,
             DressMySlugcat.FancyMenu self,
@@ -270,9 +247,6 @@ namespace DMSxMeadow
             return orig(self, series);
         }
 
-        // ============================================================
-        // HOOK DE SetCurrentlySelectedOfSeries
-        // ============================================================
         private static void SetSelected_Hook(
             Action<DressMySlugcat.FancyMenu, string, int> orig,
             DressMySlugcat.FancyMenu self,
@@ -300,9 +274,6 @@ namespace DMSxMeadow
             orig(self, series, to);
         }
 
-        // ============================================================
-        // HOOK DE ShutDownProcess
-        // ============================================================
         private static void ShutDownProcess_Hook(
             Action<DressMySlugcat.FancyMenu> orig,
             DressMySlugcat.FancyMenu self)
@@ -330,9 +301,6 @@ namespace DMSxMeadow
             orig(self);
         }
 
-        // ============================================================
-        // HOOK DE Singal - CON AUTO-SAVE EN CADA CAMBIO
-        // ============================================================
         private static void Singal_Hook(
             Action<DressMySlugcat.FancyMenu, MenuObject, string> orig,
             DressMySlugcat.FancyMenu fancyMenu,
@@ -355,9 +323,6 @@ namespace DMSxMeadow
                 }
             }
 
-            // ============================================================
-            // GUARDAR INMEDIATAMENTE EN CUALQUIER CAMBIO DE PERSONALIZACIÓN
-            // ============================================================
             if (MeadowProfileManager.IsMeadowModeActive &&
                 (message.StartsWith("SPRITE_SELECTOR_") ||
                  message.StartsWith("SPRITE_CUSTOMIZER_") ||
@@ -382,9 +347,6 @@ namespace DMSxMeadow
             orig(fancyMenu, sender, message);
         }
 
-        // ============================================================
-        // LIMPIEZA
-        // ============================================================
         public static void Dispose()
         {
             updateHook?.Dispose();
@@ -395,7 +357,7 @@ namespace DMSxMeadow
             customizationFor3ArgHook?.Dispose();
             _uiInstances.Clear();
             _currentFancyMenu = null;
-            _liveMeadowCustomization = null;
+            _liveMeadowCustomizations.Clear();
             Plugin.Logger.LogInfo("FancyMenu hooks disposed");
         }
     }

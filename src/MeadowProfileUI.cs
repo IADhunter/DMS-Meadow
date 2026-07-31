@@ -25,6 +25,7 @@ namespace DMSxMeadow
         private string _lastConfirmedSteamId = "";
         private string _lastConfirmedProfileNumber = "";
         private string _pendingProfileInput = "1";
+        private string _lastKnownSlugcat = "";
 
         public MeadowProfileUI(DressMySlugcat.FancyMenu fancyMenu)
         {
@@ -203,6 +204,8 @@ namespace DMSxMeadow
 
                 _steamIdField.OnValueChanged += OnSteamIdChangedDebug;
                 _profileNumberField.OnValueChanged += OnProfileNumberChanged;
+
+                _lastKnownSlugcat = _fancyMenu.selectedSlugcat;
             }
             catch (Exception ex)
             {
@@ -239,6 +242,18 @@ namespace DMSxMeadow
             Plugin.Logger.LogInfo($"Pending profile input updated to: '{_pendingProfileInput}'");
         }
 
+        public void CheckSlugcatChange()
+        {
+            if (!MeadowProfileManager.IsMeadowModeActive) return;
+            string currentSlugcat = _fancyMenu.selectedSlugcat;
+            if (currentSlugcat != _lastKnownSlugcat)
+            {
+                Plugin.Logger.LogInfo($"Slugcat changed to '{currentSlugcat}' with Meadow active - reloading profile for this slugcat");
+                _lastKnownSlugcat = currentSlugcat;
+                LoadProfile(MeadowProfileManager.CurrentProfileNumber);
+            }
+        }
+
         private void SetProfileNumber()
         {
             Plugin.Logger.LogInfo($"SetProfileNumber called - MeadowMode: {MeadowProfileManager.IsMeadowModeActive}, pending: '{_pendingProfileInput}'");
@@ -270,7 +285,6 @@ namespace DMSxMeadow
                 return;
             }
 
-            // Guardar el perfil actual antes de cambiar
             SaveCurrentProfile();
 
             MeadowProfileManager.SetCurrentProfile(profileNumber);
@@ -298,8 +312,9 @@ namespace DMSxMeadow
                 var customization = GetLiveCustomization();
                 if (customization != null)
                 {
-                    MeadowProfileManager.SaveCurrentProfile(customization);
-                    Plugin.Logger.LogInfo($"Saved current meadow profile {MeadowProfileManager.CurrentProfileNumber} from live object");
+                    string slugcatName = _fancyMenu.selectedSlugcat;
+                    MeadowProfileManager.SaveCurrentProfile(slugcatName, customization);
+                    Plugin.Logger.LogInfo($"Saved current meadow profile {MeadowProfileManager.CurrentProfileNumber} for slugcat '{slugcatName}'");
                 }
                 else
                 {
@@ -333,7 +348,8 @@ namespace DMSxMeadow
         {
             try
             {
-                var customization = MeadowProfileManager.GetProfileCustomization(displayNumber);
+                string slugcatName = _fancyMenu.selectedSlugcat;
+                var customization = MeadowProfileManager.GetProfileCustomization(displayNumber, slugcatName);
                 var live = GetLiveCustomization();
                 if (live == null)
                 {
@@ -343,7 +359,7 @@ namespace DMSxMeadow
 
                 if (customization != null)
                 {
-                    Plugin.Logger.LogInfo($"Loading meadow profile {displayNumber} into live object");
+                    Plugin.Logger.LogInfo($"Loading meadow profile {displayNumber} for slugcat '{slugcatName}' into live object");
 
                     live.CustomTail.Length = customization.CustomTail.Length;
                     live.CustomTail.Wideness = customization.CustomTail.Wideness;
@@ -365,15 +381,16 @@ namespace DMSxMeadow
                         });
                     }
 
-                    Plugin.Logger.LogInfo($"Loaded meadow profile {displayNumber}: Tail.Length={live.CustomTail.Length}, Sprites={live.CustomSprites.Count}");
+                    Plugin.Logger.LogInfo($"Loaded meadow profile {displayNumber} for '{slugcatName}': Tail.Length={live.CustomTail.Length}, Sprites={live.CustomSprites.Count}");
                 }
                 else
                 {
-                    Plugin.Logger.LogInfo($"Profile {displayNumber} has no saved data - using defaults");
+                    Plugin.Logger.LogInfo($"Profile {displayNumber} has no data for slugcat '{slugcatName}' - using defaults");
                     live.CustomSprites.Clear();
                     live.CustomTail = new DressMySlugcat.CustomTail();
                 }
 
+                _lastKnownSlugcat = slugcatName;
                 RefreshDummyAndControls();
             }
             catch (Exception ex)
@@ -429,7 +446,6 @@ namespace DMSxMeadow
         {
             try
             {
-                // --- Profile Number ---
                 bool profileHeld = GetHeld(_profileNumberField);
                 if (_profileFieldWasHeld && !profileHeld)
                 {
@@ -443,7 +459,6 @@ namespace DMSxMeadow
                 }
                 _profileFieldWasHeld = profileHeld;
 
-                // --- Steam ID ---
                 bool steamHeld = GetHeld(_steamIdField);
 
                 if (!_steamFieldWasHeld && steamHeld)
@@ -534,6 +549,7 @@ namespace DMSxMeadow
             _lastConfirmedSteamId = steamId;
             _lastConfirmedProfileNumber = profileNumber.ToString();
 
+            _lastKnownSlugcat = _fancyMenu.selectedSlugcat;
             LoadProfile(profileNumber);
             _statusLabel.text = $"Meadow ON - Profile {profileNumber}";
 
@@ -562,6 +578,7 @@ namespace DMSxMeadow
             _lastConfirmedProfileNumber = "";
             _profileFieldWasHeld = false;
             _steamFieldWasHeld = false;
+            _lastKnownSlugcat = "";
 
             MeadowProfileManager.IsMeadowModeActive = false;
             _statusLabel.text = "";
@@ -610,6 +627,7 @@ namespace DMSxMeadow
             _lastConfirmedProfileNumber = "";
             _profileFieldWasHeld = false;
             _steamFieldWasHeld = false;
+            _lastKnownSlugcat = "";
 
             MeadowProfileManager.IsMeadowModeActive = false;
             _statusLabel.text = "";

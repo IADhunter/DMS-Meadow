@@ -28,9 +28,6 @@ namespace DMSxMeadow
             {
                 Logger.LogInfo("Initializing DMS x Meadow v2.0...");
 
-                // ============================================================
-                // REGISTRAR OPCIONES DE REMIX
-                // ============================================================
                 On.RainWorld.OnModsInit += OnModsInit;
 
                 Logger.LogInfo("DMS x Meadow initialized successfully!");
@@ -59,11 +56,8 @@ namespace DMSxMeadow
                 MeadowProfileManager.Load();
                 MeadowProfileManager.LogAllAssignments();
 
-                // ============================================================
-                // INICIALIZAR HOOKS - ¡AMBOS!
-                // ============================================================
-                InitializeHooks();              // Hook de Customization.For
-                FancyMenuHookHandler.Initialize(); // ¡ESTE FALTABA! - Hooks de FancyMenu
+                InitializeHooks();
+                FancyMenuHookHandler.Initialize();
 
                 Logger.LogInfo("DMS x Meadow fully initialized!");
             }
@@ -99,9 +93,6 @@ namespace DMSxMeadow
             }
         }
 
-        // ============================================================
-        // Customization_For_Hook - SIN EXCLUSIÓN DE isMe
-        // ============================================================
         private static DressMySlugcat.Customization Customization_For_Hook(
             Func<Player, bool, DressMySlugcat.Customization> orig,
             Player player,
@@ -116,7 +107,6 @@ namespace DMSxMeadow
                     {
                         var owner = onlineEntity.owner;
 
-                        // ✅ ELIMINADO: !owner.isMe - AHORA TAMBIÉN APLICA AL JUGADOR LOCAL
                         if (owner != null && owner.id != null)
                         {
                             string steamId;
@@ -131,10 +121,13 @@ namespace DMSxMeadow
                                 Logger.LogInfo($"Detected non-Steam PlayerId: {steamId} (isMe: {owner.isMe})");
                             }
 
-                            var customization = MeadowProfileManager.GetCustomizationBySteamID(steamId);
+                            // Obtener el slugcat exacto de este jugador
+                            string slugcatName = player.slugcatStats.name.value;
+
+                            var customization = MeadowProfileManager.GetCustomizationBySteamID(steamId, slugcatName);
                             if (customization != null)
                             {
-                                Logger.LogInfo($"✅ Found meadow profile for SteamID: {steamId} (isMe: {owner.isMe})");
+                                Logger.LogInfo($"✅ Found meadow profile for SteamID: {steamId}, slugcat: {slugcatName} (isMe: {owner.isMe})");
                                 var result = customization.Copy();
                                 result.PlayerNumber = 0;
 
@@ -145,7 +138,7 @@ namespace DMSxMeadow
                             }
                             else
                             {
-                                Logger.LogInfo($"No meadow profile found for SteamID: {steamId} (isMe: {owner.isMe})");
+                                Logger.LogInfo($"No meadow profile found for SteamID: {steamId}, slugcat: {slugcatName} (isMe: {owner.isMe})");
                             }
                         }
                     }
